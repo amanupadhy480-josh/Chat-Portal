@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Portal Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; list-style-type: none; display: flex; flex-direction: column; }
+        .msg { padding: 8px 12px; margin: 5px; border-radius: 8px; max-width: 70%; word-wrap: break-word; }
+        .received { background: white; align-self: flex-start; }
+        .sent { background: #dcf8c6; align-self: flex-end; }
+        #form { display: flex; padding: 10px; background: white; border-top: 1px solid #ccc; }
+        #input { flex: 1; border: 1px solid #ccc; padding: 10px; border-radius: 20px; outline: none; }
+        button { background: #075e54; color: white; border: none; padding: 10px 20px; border-radius: 20px; margin-left: 5px; }
+    </style>
+</head>
+<body>
+    <ul id="messages"></ul>
+    <form id="form">
+        <input id="input" autocomplete="off" placeholder="Type a message..." /><button>Send</button>
+    </form>
+
+    <script>
+        var socket = io();
+        var form = document.getElementById('form');
+        var input = document.getElementById('input');
+        var messages = document.getElementById('messages');
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (input.value) {
+                socket.send(input.value); // Message server ko bhejna
+                input.value = '';
+            }
+        });
+
+        socket.on('message', function(msg) {
+            var item = document.createElement('li');
+            item.textContent = msg;
+            item.classList.add('msg');
+            // Yahan hum decide kar sakte hain ki msg sent hai ya received
+            item.classList.add('received'); 
+            messages.appendChild(item);
+            window.scrollTo(0, document.body.scrollHeight);
+        });
+    </script>
+</body>
+  </html>
+  
