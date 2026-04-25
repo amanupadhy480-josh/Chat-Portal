@@ -1,10 +1,9 @@
 flask
-flask-sqlalchemy
 flask-socketio
+flask-sqlalchemy
 flask-login
-eventlet
-gunicorn
 psycopg2-binary
-
-
-
+gevent>=24.10.1
+gevent-websocket
+gunicorn
+werkzeug
