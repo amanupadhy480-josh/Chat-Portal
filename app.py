@@ -1,12 +1,14 @@
 import os
-from flask import Flask, render_template, redirect, url_for, request, flash, session
+from datetime import datetime
+from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, emit, join_room
+from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'aman-chat-portal-2026'
+app.config['SECRET_KEY'] = 'aman-chat-2026'
+# Render ke PostgreSQL ya local SQLite ke liye
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///chat.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -15,7 +17,6 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Database Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
@@ -26,28 +27,26 @@ class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
     sender = db.Column(db.String(50), nullable=False)
-    receiver = db.Column(db.String(50), nullable=False) # Kise bheja?
+    receiver = db.Column(db.String(50), nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Routes
 @app.route('/')
 @login_required
 def home():
-    # Saare users ki list (khud ko chhod kar)
     users = User.query.filter(User.username != current_user.username).all()
     return render_template('home.html', users=users)
 
 @app.route('/chat/<recipient>')
 @login_required
 def chat(recipient):
-    # Sirf in do logo ke beech ki purani messages
     messages = Message.query.filter(
         ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
         ((Message.sender == recipient) & (Message.receiver == current_user.username))
-    ).all()
+    ).order_by(Message.timestamp.asc()).all()
     return render_template('index.html', recipient=recipient, saved_messages=messages)
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -57,9 +56,9 @@ def login():
         password = request.form.get('password')
         user = User.query.filter_by(mobile=mobile).first()
         if user and check_password_hash(user.password, password):
-            login_user(user, remember=True) # remember=True se logout nahi hoga
+            login_user(user, remember=True)
             return redirect(url_for('home'))
-        flash('Mobile or Password galat hai!')
+        flash('Invalid Mobile or Password')
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -69,13 +68,10 @@ def signup():
         mobile = request.form.get('mobile')
         password = request.form.get('password')
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-        try:
-            new_user = User(username=username, mobile=mobile, password=hashed_pw)
-            db.session.add(new_user)
-            db.session.commit()
-            return redirect(url_for('login'))
-        except:
-            flash('Mobile number ya Username pehle se hai!')
+        new_user = User(username=username, mobile=mobile, password=hashed_pw)
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect(url_for('login'))
     return render_template('signup.html')
 
 @app.route('/logout')
@@ -83,22 +79,27 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# Real-time Logic
 @socketio.on('private_message')
 def handle_private_message(data):
-    recipient = data['recipient']
-    msg_content = data['message']
-    
-    new_msg = Message(content=msg_content, sender=current_user.username, receiver=recipient)
+    new_msg = Message(
+        content=data['message'], 
+        sender=current_user.username, 
+        receiver=data['recipient']
+    )
     db.session.add(new_msg)
     db.session.commit()
     
-    # Dono ko message bhejna
-    emit('new_msg', {'msg': msg_content, 'sender': current_user.username}, broadcast=True)
+    # Time format for UI
+    time_str = datetime.now().strftime("%H:%M")
+    emit('new_msg', {
+        'msg': data['message'], 
+        'sender': current_user.username, 
+        'time': time_str
+    }, broadcast=True)
 
 with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
     socketio.run(app)
-    
+        
