@@ -9,7 +9,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'aman_portal_2026')
 
-# Render PostgreSQL fix: postgres:// ko postgresql:// mein convert karna padta hai
 uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
 if uri.startswith("postgres://"):
     uri = uri.replace("postgres://", "postgresql://", 1)
@@ -22,11 +21,19 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# User Table
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     mobile = db.Column(db.String(15), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+
+# Naya Contact System
+class Contact(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    contact_username = db.Column(db.String(50), nullable=False)
+    contact_mobile = db.Column(db.String(15), nullable=False)
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -42,8 +49,31 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def home():
-    users = User.query.filter(User.username != current_user.username).all()
-    return render_template('home.html', users=users)
+    # Ab sirf wahi users dikhenge jo "Add" kiye gaye hain
+    my_contacts = Contact.query.filter_by(user_id=current_user.id).all()
+    return render_template('home.html', contacts=my_contacts)
+
+@app.route('/add_contact', methods=['POST'])
+@login_required
+def add_contact():
+    mobile = request.form.get('mobile')
+    user_to_add = User.query.filter_by(mobile=mobile).first()
+    
+    if user_to_add:
+        if user_to_add.id == current_user.id:
+            flash("You can't add yourself!")
+        else:
+            exists = Contact.query.filter_by(user_id=current_user.id, contact_mobile=mobile).first()
+            if not exists:
+                new_c = Contact(user_id=current_user.id, contact_username=user_to_add.username, contact_mobile=mobile)
+                db.session.add(new_c)
+                db.session.commit()
+                flash("Contact Added!")
+            else:
+                flash("Already in your list")
+    else:
+        flash("User not found!")
+    return redirect(url_for('home'))
 
 @app.route('/chat/<recipient>')
 @login_required
@@ -96,9 +126,10 @@ def handle_msg(data):
     emit('new_msg', {'msg': data['message'], 'sender': current_user.username, 'time': time_now, 'recipient': data['recipient']}, broadcast=True)
 
 with app.app_context():
+    # Agar column missing hai toh Render par reset zaroori hai
     db.create_all()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     socketio.run(app, host='0.0.0.0', port=port)
-    
+              
