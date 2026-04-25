@@ -2,31 +2,49 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contacts</title>
+    <title>Chat Portal - Home</title>
     <style>
-        body { font-family: sans-serif; margin: 0; background: #f0f2f5; }
-        .header { background: #075e54; color: white; padding: 20px; font-size: 20px; font-weight: bold; }
-        .user-list { list-style: none; padding: 0; margin: 0; }
-        .user-item { background: white; padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; cursor: pointer; text-decoration: none; color: black; }
-        .avatar { width: 45px; height: 45px; background: #ccc; border-radius: 50%; margin-right: 15px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
-        .logout-btn { float: right; font-size: 14px; background: #cc0000; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
+        .header { background: #075e54; color: white; padding: 15px 20px; font-size: 22px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .logout-btn { font-size: 14px; background: rgba(255,255,255,0.2); color: white; padding: 6px 12px; border-radius: 20px; text-decoration: none; border: 1px solid white; }
+        
+        .user-list { flex: 1; overflow-y: auto; background: white; width: 100%; }
+        .user-item { padding: 15px 20px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; cursor: pointer; text-decoration: none; color: black; transition: 0.2s; }
+        .user-item:active { background: #ebebeb; }
+        
+        .avatar { width: 50px; height: 50px; background: #128c7e; border-radius: 50%; margin-right: 15px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px; font-weight: bold; }
+        .info { flex: 1; }
+        .info strong { font-size: 17px; }
+        .info small { color: #666; font-size: 13px; margin-top: 2px; display: block; }
     </style>
 </head>
 <body>
     <div class="header">
-        Contacts 
+        <span>Chat Portal</span>
         <a href="/logout" class="logout-btn">Logout</a>
     </div>
+
     <div class="user-list">
-        {% for user in users %}
-        <a href="/chat/{{ user.username }}" class="user-item">
-            <div class="avatar" style="background: #{{ range(100, 999)|random }};">{{ user.username[0]|upper }}</div>
-            <div>
-                <strong>{{ user.username }}</strong><br>
-                <small style="color: gray;">{{ user.mobile }}</small>
+        {% if users %}
+            {% for user in users %}
+            <a href="/chat/{{ user.username }}" class="user-item">
+                <div class="avatar">{{ user.username[0]|upper }}</div>
+                <div class="info">
+                    <strong>{{ user.username }}</strong>
+                    <small>+91 {{ user.mobile }}</small>
+                </div>
+                <div style="color: #075e54; font-size: 20px;">›</div>
+            </a>
+            {% endfor %}
+        {% else %}
+            <div style="text-align: center; padding: 50px; color: gray;">
+                No contacts found.<br>Ask your friends to signup!
             </div>
-        </a>
-        {% endfor %}
+        {% endif %}
+    </div>
+
+    <div style="padding: 10px; text-align: center; font-size: 12px; color: gray; background: white; border-top: 1px solid #eee;">
+        Logged in as: <strong>{{ current_user.username }}</strong>
     </div>
 </body>
 </html>
