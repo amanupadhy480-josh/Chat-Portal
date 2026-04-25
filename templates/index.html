@@ -2,85 +2,96 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Portal Pro</title>
+    <title>Chat with {{ recipient }}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        :root { --main-bg: #e5ddd5; --header-bg: #075e54; --sent-bg: #dcf8c6; }
-        body { font-family: sans-serif; margin: 0; background: var(--main-bg); display: flex; flex-direction: column; height: 100vh; }
-        .header { background: var(--header-bg); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        :root { --bg: #e5ddd5; --header: #075e54; --sent: #dcf8c6; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; transition: 0.3s; }
+        .header { background: var(--header); color: white; padding: 12px; display: flex; align-items: center; }
+        .back-btn { text-decoration: none; color: white; font-size: 20px; margin-right: 15px; }
         #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; list-style: none; }
-        .msg { padding: 8px 12px; margin: 5px 0; border-radius: 10px; max-width: 75%; position: relative; }
-        .sender-name { font-size: 10px; font-weight: bold; display: block; margin-bottom: 3px; }
+        .msg { padding: 8px 12px; margin: 5px 0; border-radius: 10px; max-width: 75%; position: relative; font-size: 16px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .received { background: white; align-self: flex-start; }
-        .sent { background: var(--sent-bg); align-self: flex-end; }
+        .sent { background: var(--sent); align-self: flex-end; }
+        
         #form { display: flex; padding: 10px; background: #f0f0f0; }
-        #input { flex: 1; border-radius: 20px; border: 1px solid #ccc; padding: 10px; outline: none; }
-        .theme-panel { padding: 5px; background: #eee; display: flex; gap: 10px; justify-content: center; }
-        .dot { height: 20px; width: 20px; border-radius: 50%; cursor: pointer; border: 1px solid #000; }
+        #input { flex: 1; border-radius: 20px; border: none; padding: 12px; outline: none; }
+        
+        /* Floating Theme Menu */
+        .theme-container { position: fixed; top: 70px; right: 20px; z-index: 100; }
+        .theme-btn { background: var(--header); color: white; width: 40px; height: 40px; border-radius: 50%; border: 2px solid white; cursor: pointer; }
+        .theme-options { display: none; background: white; margin-top: 10px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); overflow: hidden; }
+        .theme-opt { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 12px; text-align: center; }
+        .theme-opt:hover { background: #f5f5f5; }
     </style>
 </head>
 <body>
     <div class="header">
-        <span>Chat: {{ current_user.username }}</span>
-        <a href="/login" style="color: white; font-size: 12px;">Logout</a>
+        <a href="/" class="back-btn">←</a>
+        <div>
+            <strong>{{ recipient }}</strong><br>
+            <small style="font-size: 10px; opacity: 0.8;">Online</small>
+        </div>
     </div>
 
-    <div class="theme-panel">
-        <span>Theme:</span>
-        <div class="dot" style="background: #075e54;" onclick="changeTheme('#075e54', '#dcf8c6')"></div>
-        <div class="dot" style="background: #124076;" onclick="changeTheme('#124076', '#AAC4FF')"></div>
-        <div class="dot" style="background: #7D0A0A;" onclick="changeTheme('#7D0A0A', '#EAD196')"></div>
+    <div class="theme-container">
+        <button class="theme-btn" onclick="toggleThemes()">🎨</button>
+        <div id="themeList" class="theme-options">
+            <div class="theme-opt" onclick="setTheme('#e5ddd5', '#075e54', '#dcf8c6')">Default</div>
+            <div class="theme-opt" onclick="setTheme('#ffffff', '#124076', '#AAC4FF')">Blue Sky</div>
+            <div class="theme-opt" onclick="setTheme('#fce4ec', '#880e4f', '#f48fb1')">Pinkish</div>
+            <div class="theme-opt" onclick="setTheme('#121212', '#222', '#333')">Dark</div>
+        </div>
     </div>
 
     <ul id="messages">
         {% for msg in saved_messages %}
             <li class="msg {% if msg.sender == current_user.username %}sent{% else %}received{% endif %}">
-                <span class="sender-name">{{ msg.sender }}</span>
                 {{ msg.content }}
             </li>
         {% endfor %}
     </ul>
 
     <form id="form">
-        <input id="input" autocomplete="off" placeholder="Type a message..." /><button style="border-radius: 50%; margin-left: 5px;">></button>
+        <input id="input" autocomplete="off" placeholder="Type a message..." required />
+        <button type="submit" style="background: var(--header); color: white; border: none; border-radius: 50%; width: 45px; margin-left: 5px; cursor: pointer;">➤</button>
     </form>
 
     <script>
         var socket = io();
-        var current_user = "{{ current_user.username }}";
+        var recipient = "{{ recipient }}";
+        var me = "{{ current_user.username }}";
 
-        function changeTheme(header, bubble) {
-            document.documentElement.style.setProperty('--header-bg', header);
-            document.documentElement.style.setProperty('--sent-bg', bubble);
-            localStorage.setItem('theme-header', header);
-            localStorage.setItem('theme-bubble', bubble);
+        function toggleThemes() {
+            var list = document.getElementById('themeList');
+            list.style.display = (list.style.display == 'block') ? 'none' : 'block';
         }
 
-        // Load saved theme
-        if(localStorage.getItem('theme-header')) {
-            changeTheme(localStorage.getItem('theme-header'), localStorage.getItem('theme-bubble'));
+        function setTheme(bg, header, sent) {
+            document.documentElement.style.setProperty('--bg', bg);
+            document.documentElement.style.setProperty('--header', header);
+            document.documentElement.style.setProperty('--sent', sent);
+            localStorage.setItem('chat-theme', JSON.stringify({bg, header, sent}));
+            toggleThemes();
         }
+
+        // Apply saved theme
+        var saved = JSON.parse(localStorage.getItem('chat-theme'));
+        if(saved) setTheme(saved.bg, saved.header, saved.sent);
 
         document.getElementById('form').addEventListener('submit', function(e) {
             e.preventDefault();
             var input = document.getElementById('input');
-            if (input.value) {
-                socket.send(input.value);
-                input.value = '';
-            }
+            socket.emit('private_message', { message: input.value, recipient: recipient });
+            input.value = '';
         });
 
-        socket.on('message', function(data) {
+        socket.on('new_msg', function(data) {
+            // Sirf wahi message dikhana jo in do users ke beech hai
             var item = document.createElement('li');
             item.classList.add('msg');
-            item.innerHTML = `<span class="sender-name">${data.user}</span> ${data.msg}`;
-            
-            if(data.user === current_user) {
-                item.classList.add('sent');
-            } else {
-                item.classList.add('received');
-            }
-            
+            item.textContent = data.msg;
+            item.classList.add(data.sender === me ? 'sent' : 'received');
             document.getElementById('messages').appendChild(item);
             window.scrollTo(0, document.body.scrollHeight);
         });
