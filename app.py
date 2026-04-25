@@ -1,12 +1,12 @@
 import os
-from flask import Flask, render_template, redirect, url_for, request, flash
+from flask import Flask, render_template, redirect, url_for, request, flash, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dev-secret-key'
+app.config['SECRET_KEY'] = 'aman-chat-portal-2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///chat.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -19,12 +19,14 @@ login_manager.login_view = 'login'
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
+    mobile = db.Column(db.String(15), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
     sender = db.Column(db.String(50), nullable=False)
+    receiver = db.Column(db.String(50), nullable=False) # Kise bheja?
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -33,44 +35,70 @@ def load_user(user_id):
 # Routes
 @app.route('/')
 @login_required
-def index():
-    messages = Message.query.all()
-    return render_template('index.html', saved_messages=messages)
+def home():
+    # Saare users ki list (khud ko chhod kar)
+    users = User.query.filter(User.username != current_user.username).all()
+    return render_template('home.html', users=users)
+
+@app.route('/chat/<recipient>')
+@login_required
+def chat(recipient):
+    # Sirf in do logo ke beech ki purani messages
+    messages = Message.query.filter(
+        ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
+        ((Message.sender == recipient) & (Message.receiver == current_user.username))
+    ).all()
+    return render_template('index.html', recipient=recipient, saved_messages=messages)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
+        mobile = request.form.get('mobile')
         password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
+        user = User.query.filter_by(mobile=mobile).first()
         if user and check_password_hash(user.password, password):
-            login_user(user)
-            return redirect(url_for('index'))
-        flash('Invalid Username or Password')
+            login_user(user, remember=True) # remember=True se logout nahi hoga
+            return redirect(url_for('home'))
+        flash('Mobile or Password galat hai!')
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
         username = request.form.get('username')
+        mobile = request.form.get('mobile')
         password = request.form.get('password')
         hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=username, password=hashed_pw)
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
+        try:
+            new_user = User(username=username, mobile=mobile, password=hashed_pw)
+            db.session.add(new_user)
+            db.session.commit()
+            return redirect(url_for('login'))
+        except:
+            flash('Mobile number ya Username pehle se hai!')
     return render_template('signup.html')
 
-@socketio.on('message')
-def handleMessage(msg):
-    new_msg = Message(content=msg, sender=current_user.username)
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+# Real-time Logic
+@socketio.on('private_message')
+def handle_private_message(data):
+    recipient = data['recipient']
+    msg_content = data['message']
+    
+    new_msg = Message(content=msg_content, sender=current_user.username, receiver=recipient)
     db.session.add(new_msg)
     db.session.commit()
-    # Broadcast sender name also
-    emit('message', {'msg': msg, 'user': current_user.username}, broadcast=True)
+    
+    # Dono ko message bhejna
+    emit('new_msg', {'msg': msg_content, 'sender': current_user.username}, broadcast=True)
 
 with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
     socketio.run(app)
+    
