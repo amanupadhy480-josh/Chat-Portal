@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contacts</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f0f2f5; }
+        .header { background: #075e54; color: white; padding: 20px; font-size: 20px; font-weight: bold; }
+        .user-list { list-style: none; padding: 0; margin: 0; }
+        .user-item { background: white; padding: 15px; border-bottom: 1px solid #eee; display: flex; align-items: center; cursor: pointer; text-decoration: none; color: black; }
+        .avatar { width: 45px; height: 45px; background: #ccc; border-radius: 50%; margin-right: 15px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
+        .logout-btn { float: right; font-size: 14px; background: #cc0000; color: white; padding: 5px 10px; border-radius: 5px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        Contacts 
+        <a href="/logout" class="logout-btn">Logout</a>
+    </div>
+    <div class="user-list">
+        {% for user in users %}
+        <a href="/chat/{{ user.username }}" class="user-item">
+            <div class="avatar" style="background: #{{ range(100, 999)|random }};">{{ user.username[0]|upper }}</div>
+            <div>
+                <strong>{{ user.username }}</strong><br>
+                <small style="color: gray;">{{ user.mobile }}</small>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</body>
+</html>
