@@ -1,10 +1,90 @@
-<body style="font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0;">
-    <form method="POST" style="background: white; padding: 30px; border-radius: 10px; width: 300px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <h2 style="color: #075e54; margin-top: 0;">Register</h2>
-        <input name="username" placeholder="Full Name" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px;" required><br>
-        <input name="mobile" placeholder="Mobile Number" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px;" required><br>
-        <input name="password" type="password" placeholder="Password" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px;" required><br>
-        <button type="submit" style="width: 104%; padding: 10px; background: #075e54; color: white; border: none; border-radius: 5px; cursor: pointer;">Signup</button>
-        <p style="font-size: 12px; text-align: center;">Already have account? <a href="/login">Login</a></p>
-    </form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Portal - Register</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #e5ddd5; 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+        }
+        .signup-container { 
+            background: white; 
+            width: 100%; 
+            max-width: 420px; 
+            padding: 40px 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15); 
+            box-sizing: border-box; 
+        }
+        .header-text { 
+            color: #075e54; 
+            text-align: center; 
+            margin-bottom: 25px; 
+        }
+        .header-text h2 { margin: 0; font-size: 28px; }
+        .header-text p { color: #666; font-size: 14px; margin-top: 5px; }
+
+        input { 
+            width: 100%; 
+            padding: 15px; 
+            margin: 12px 0; 
+            border: 1px solid #ccc; 
+            border-radius: 8px; 
+            box-sizing: border-box; 
+            font-size: 16px; 
+            outline-color: #075e54;
+        }
+        button { 
+            width: 100%; 
+            padding: 16px; 
+            background: #075e54; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 18px; 
+            font-weight: bold;
+            cursor: pointer; 
+            margin-top: 15px;
+            transition: 0.3s;
+        }
+        button:active { background: #128c7e; transform: scale(0.98); }
+        
+        .footer-link { 
+            text-align: center; 
+            margin-top: 20px; 
+            font-size: 14px; 
+            color: #555;
+        }
+        .footer-link a { 
+            color: #075e54; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="signup-container">
+        <div class="header-text">
+            <h2>Join Us</h2>
+            <p>Enter your details to start chatting</p>
+        </div>
+        <form method="POST">
+            <input name="username" type="text" placeholder="Full Name (e.g. Aman)" required>
+            <input name="mobile" type="tel" placeholder="Mobile Number" required>
+            <input name="password" type="password" placeholder="Set Password" required>
+            <button type="submit">Create My Account</button>
+        </form>
+        <div class="footer-link">
+            Already have an account? <a href="/login">Login here</a>
+        </div>
+    </div>
 </body>
+        </html>
+
