@@ -1,11 +1,10 @@
 flask
-flask-socketio
 flask-sqlalchemy
+flask-socketio
 flask-login
-psycopg2-binary
-gevent
-gevent-websocket
+eventlet
 gunicorn
-werkzeug
+psycopg2-binary
+
 
 
