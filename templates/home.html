@@ -3,25 +3,28 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Portal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f2f5; }
         .header { background: #075e54; color: white; padding: 15px; display: flex; justify-content: space-between; position: sticky; top:0; z-index:10; }
         .profile-card { background: #128c7e; color: white; padding: 15px; margin-bottom: 10px; font-size: 14px; }
         .add-section { background: white; padding: 15px; border-bottom: 1px solid #ddd; }
         .add-section input { width: 65%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-        .add-section button { width: 28%; padding: 10px; background: #075e54; color: white; border: none; border-radius: 5px; }
-        .section-title { padding: 10px 15px; font-size: 12px; color: #666; text-transform: uppercase; }
-        .user-item { background: white; padding: 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; text-decoration: none; color: black; }
+        .add-section button { width: 28%; padding: 10px; background: #075e54; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .section-title { padding: 10px 15px; font-size: 12px; color: #666; text-transform: uppercase; font-weight: bold; }
+        .user-item { background: white; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
         .user-info { display: flex; align-items: center; flex: 1; text-decoration: none; color: black; }
         .avatar { width: 45px; height: 45px; background: #075e54; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; margin-right: 12px; font-weight: bold; }
-        .del-btn { color: #ff5252; text-decoration: none; font-size: 18px; padding: 5px 10px; }
-        .unknown-tag { background: #e1f5fe; color: #0288d1; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
+        .action-btn { padding: 6px 12px; border-radius: 4px; border: none; font-size: 12px; cursor: pointer; text-decoration: none; font-weight: bold; }
+        .btn-accept { background: #25D366; color: white; }
+        .btn-reject { background: #ff5252; color: white; margin-left: 5px; }
+        .trash-icon { color: #888; font-size: 18px; padding: 5px; }
     </style>
 </head>
 <body>
     <div class="header">
         <strong>Aman Portal</strong>
-        <a href="/logout" style="color:white; text-decoration:none;">Logout</a>
+        <a href="/logout" style="color:white; text-decoration:none;"><i class="bi bi-box-arrow-right"></i> Logout</a>
     </div>
 
     <div class="profile-card">
@@ -31,12 +34,12 @@
 
     <div class="add-section">
         <form action="/add_contact" method="POST">
-            <input name="mobile" placeholder="Search Mobile..." required>
+            <input name="mobile" placeholder="Enter Mobile Number..." required>
             <button type="submit">Add</button>
         </form>
     </div>
 
-    <div class="section-title">Saved Contacts</div>
+    <div class="section-title">Contacts</div>
     {% for c in contacts %}
     <div class="user-item">
         <a href="/chat/{{ c.contact_username }}" class="user-info">
@@ -46,24 +49,41 @@
                 <small>+91 {{ c.contact_mobile }}</small>
             </div>
         </a>
-        <a href="/delete_contact/{{ c.id }}" class="del-btn" onclick="return confirm('Remove contact?')">×</a>
+        <a href="/delete_contact/{{ c.id }}" class="trash-icon" onclick="return confirm('Remove contact?')">
+            <i class="bi bi-trash"></i>
+        </a>
     </div>
     {% endfor %}
 
     {% if unknown %}
-    <div class="section-title">Unknown Messages</div>
+    <div class="section-title">New Message Requests</div>
     {% for u in unknown %}
     <div class="user-item">
-        <a href="/chat/{{ u.username }}" class="user-info">
+        <div class="user-info">
             <div class="avatar" style="background:#607d8b;">{{ u.username[0]|upper }}</div>
             <div>
-                <strong>{{ u.username }}</strong> <span class="unknown-tag">New</span><br>
+                <strong>{{ u.username }}</strong><br>
                 <small>+91 {{ u.mobile }}</small>
             </div>
-        </a>
+        </div>
+        <div style="display: flex;">
+            <form action="/add_contact" method="POST" style="display:inline;">
+                <input type="hidden" name="mobile" value="{{ u.mobile }}">
+                <button type="submit" class="action-btn btn-accept">Accept</button>
+            </form>
+            <a href="/reject_unknown/{{ u.username }}" class="action-btn btn-reject">Reject</a>
+        </div>
     </div>
     {% endfor %}
     {% endif %}
+
+    <div style="padding: 30px 15px; text-align: center;">
+        <form action="/delete_account" method="POST" onsubmit="return confirm('WARNING: Account delete karne se aapke saare chats aur contacts mit jayenge. Kya aap sure hain?')">
+            <button type="submit" style="background:none; border:1px solid #ff5252; color:#ff5252; padding:10px 20px; border-radius:25px; cursor:pointer;">
+                Deactivate My Account
+            </button>
+        </form>
+    </div>
 </body>
-                                                                                          </html>
-                                                                                          
+    </html>
+                
