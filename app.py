@@ -21,14 +21,12 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# User Table
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     mobile = db.Column(db.String(15), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
 
-# Naya Contact System
 class Contact(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -38,8 +36,8 @@ class Contact(db.Model):
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
-    sender = db.Column(db.String(50), nullable=False)
-    receiver = db.Column(db.String(50), nullable=False)
+    sender = db.Column(db.String(50), nullable=False) # Username
+    receiver = db.Column(db.String(50), nullable=False) # Username
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
@@ -49,16 +47,26 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def home():
-    # Ab sirf wahi users dikhenge jo "Add" kiye gaye hain
-    my_contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    return render_template('home.html', contacts=my_contacts)
+    # 1. Saved Contacts
+    contacts = Contact.query.filter_by(user_id=current_user.id).all()
+    saved_usernames = [c.contact_username for c in contacts]
+    
+    # 2. Unknown Messengers (Jisne msg bheja par save nahi hai)
+    unknown_msgs = Message.query.filter_by(receiver=current_user.username).all()
+    unknown_users = []
+    for m in unknown_msgs:
+        if m.sender not in saved_usernames and m.sender != current_user.username:
+            u_info = User.query.filter_by(username=m.sender).first()
+            if u_info and u_info.username not in [x['username'] for x in unknown_users]:
+                unknown_users.append({'username': u_info.username, 'mobile': u_info.mobile})
+
+    return render_template('home.html', contacts=contacts, unknown=unknown_users)
 
 @app.route('/add_contact', methods=['POST'])
 @login_required
 def add_contact():
     mobile = request.form.get('mobile')
     user_to_add = User.query.filter_by(mobile=mobile).first()
-    
     if user_to_add:
         if user_to_add.id == current_user.id:
             flash("You can't add yourself!")
@@ -68,21 +76,29 @@ def add_contact():
                 new_c = Contact(user_id=current_user.id, contact_username=user_to_add.username, contact_mobile=mobile)
                 db.session.add(new_c)
                 db.session.commit()
-                flash("Contact Added!")
-            else:
-                flash("Already in your list")
+                flash("Added Successfully!")
     else:
         flash("User not found!")
+    return redirect(url_for('home'))
+
+@app.route('/delete_contact/<int:id>')
+@login_required
+def delete_contact(id):
+    c = Contact.query.get(id)
+    if c and c.user_id == current_user.id:
+        db.session.delete(c)
+        db.session.commit()
     return redirect(url_for('home'))
 
 @app.route('/chat/<recipient>')
 @login_required
 def chat(recipient):
+    target_user = User.query.filter_by(username=recipient).first()
     messages = Message.query.filter(
         ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
         ((Message.sender == recipient) & (Message.receiver == current_user.username))
     ).order_by(Message.timestamp.asc()).all()
-    return render_template('index.html', recipient=recipient, saved_messages=messages)
+    return render_template('index.html', recipient=recipient, recipient_mobile=target_user.mobile if target_user else "", saved_messages=messages)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -93,20 +109,19 @@ def login():
         if user and check_password_hash(user.password, password):
             login_user(user, remember=True)
             return redirect(url_for('home'))
-        flash('Invalid Mobile or Password')
+        flash('Invalid Credentials')
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
-        username = request.form.get('username')
-        mobile = request.form.get('mobile')
+        username = request.form.get('username').strip()
+        mobile = request.form.get('mobile').strip()
         password = request.form.get('password')
-        if User.query.filter_by(mobile=mobile).first():
-            flash('Mobile already registered!')
+        if User.query.filter_by(mobile=mobile).first() or User.query.filter_by(username=username).first():
+            flash('User already exists!')
             return redirect(url_for('signup'))
-        hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-        new_user = User(username=username, mobile=mobile, password=hashed_pw)
+        new_user = User(username=username, mobile=mobile, password=generate_password_hash(password, method='pbkdf2:sha256'))
         db.session.add(new_user)
         db.session.commit()
         return redirect(url_for('login'))
@@ -122,14 +137,16 @@ def handle_msg(data):
     new_msg = Message(content=data['message'], sender=current_user.username, receiver=data['recipient'])
     db.session.add(new_msg)
     db.session.commit()
-    time_now = datetime.now().strftime("%H:%M")
-    emit('new_msg', {'msg': data['message'], 'sender': current_user.username, 'time': time_now, 'recipient': data['recipient']}, broadcast=True)
+    # IST Time fix (Server time usually UTC, convert manually if needed or use JS time)
+    emit('new_msg', {
+        'msg': data['message'], 
+        'sender': current_user.username, 
+        'recipient': data['recipient']
+    }, broadcast=True)
 
 with app.app_context():
-    # Agar column missing hai toh Render par reset zaroori hai
     db.create_all()
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host='0.0.0.0', port=port)
-              
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+            
