@@ -36,8 +36,8 @@ class Contact(db.Model):
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
-    sender = db.Column(db.String(50), nullable=False) # Username
-    receiver = db.Column(db.String(50), nullable=False) # Username
+    sender = db.Column(db.String(50), nullable=False)
+    receiver = db.Column(db.String(50), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
@@ -47,18 +47,18 @@ def load_user(user_id):
 @app.route('/')
 @login_required
 def home():
-    # 1. Saved Contacts
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    saved_usernames = [c.contact_username for c in contacts]
+    saved_mobiles = [c.contact_mobile for c in contacts]
     
-    # 2. Unknown Messengers (Jisne msg bheja par save nahi hai)
+    # Unknown messengers logic
     unknown_msgs = Message.query.filter_by(receiver=current_user.username).all()
     unknown_users = []
+    seen_mobiles = set()
     for m in unknown_msgs:
-        if m.sender not in saved_usernames and m.sender != current_user.username:
-            u_info = User.query.filter_by(username=m.sender).first()
-            if u_info and u_info.username not in [x['username'] for x in unknown_users]:
-                unknown_users.append({'username': u_info.username, 'mobile': u_info.mobile})
+        u_info = User.query.filter_by(username=m.sender).first()
+        if u_info and u_info.mobile not in saved_mobiles and u_info.mobile not in seen_mobiles:
+            unknown_users.append({'username': u_info.username, 'mobile': u_info.mobile})
+            seen_mobiles.add(u_info.mobile)
 
     return render_template('home.html', contacts=contacts, unknown=unknown_users)
 
@@ -76,9 +76,13 @@ def add_contact():
                 new_c = Contact(user_id=current_user.id, contact_username=user_to_add.username, contact_mobile=mobile)
                 db.session.add(new_c)
                 db.session.commit()
-                flash("Added Successfully!")
-    else:
-        flash("User not found!")
+    return redirect(url_for('home'))
+
+@app.route('/reject_unknown/<username>')
+@login_required
+def reject_unknown(username):
+    Message.query.filter_by(sender=username, receiver=current_user.username).delete()
+    db.session.commit()
     return redirect(url_for('home'))
 
 @app.route('/delete_contact/<int:id>')
@@ -90,6 +94,17 @@ def delete_contact(id):
         db.session.commit()
     return redirect(url_for('home'))
 
+@app.route('/delete_account', methods=['POST'])
+@login_required
+def delete_account():
+    user = User.query.get(current_user.id)
+    Contact.query.filter_by(user_id=user.id).delete()
+    Message.query.filter((Message.sender == user.username) | (Message.receiver == user.username)).delete()
+    db.session.delete(user)
+    db.session.commit()
+    logout_user()
+    return redirect(url_for('signup'))
+
 @app.route('/chat/<recipient>')
 @login_required
 def chat(recipient):
@@ -100,6 +115,7 @@ def chat(recipient):
     ).order_by(Message.timestamp.asc()).all()
     return render_template('index.html', recipient=recipient, recipient_mobile=target_user.mobile if target_user else "", saved_messages=messages)
 
+# Login, Signup, Logout routes (Keep them as they are in your source)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -137,7 +153,6 @@ def handle_msg(data):
     new_msg = Message(content=data['message'], sender=current_user.username, receiver=data['recipient'])
     db.session.add(new_msg)
     db.session.commit()
-    # IST Time fix (Server time usually UTC, convert manually if needed or use JS time)
     emit('new_msg', {
         'msg': data['message'], 
         'sender': current_user.username, 
@@ -149,4 +164,4 @@ with app.app_context():
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
-            
+    
