@@ -2,48 +2,68 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Portal - Home</title>
+    <title>Chat Portal</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; height: 100vh; }
-        .header { background: #075e54; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .add-box { background: white; padding: 15px; border-bottom: 1px solid #ddd; }
-        .add-box input { width: 70%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
-        .add-box button { width: 25%; padding: 10px; background: #128c7e; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .user-list { flex: 1; overflow-y: auto; background: white; }
-        .user-item { padding: 15px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; text-decoration: none; color: black; }
-        .avatar { width: 45px; height: 45px; background: #128c7e; border-radius: 50%; margin-right: 15px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
-        .flash { color: red; font-size: 12px; text-align: center; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f2f5; }
+        .header { background: #075e54; color: white; padding: 15px; display: flex; justify-content: space-between; position: sticky; top:0; z-index:10; }
+        .profile-card { background: #128c7e; color: white; padding: 15px; margin-bottom: 10px; font-size: 14px; }
+        .add-section { background: white; padding: 15px; border-bottom: 1px solid #ddd; }
+        .add-section input { width: 65%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .add-section button { width: 28%; padding: 10px; background: #075e54; color: white; border: none; border-radius: 5px; }
+        .section-title { padding: 10px 15px; font-size: 12px; color: #666; text-transform: uppercase; }
+        .user-item { background: white; padding: 15px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; text-decoration: none; color: black; }
+        .user-info { display: flex; align-items: center; flex: 1; text-decoration: none; color: black; }
+        .avatar { width: 45px; height: 45px; background: #075e54; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; margin-right: 12px; font-weight: bold; }
+        .del-btn { color: #ff5252; text-decoration: none; font-size: 18px; padding: 5px 10px; }
+        .unknown-tag { background: #e1f5fe; color: #0288d1; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <span>My Chats</span>
-        <a href="/logout" style="color:white; text-decoration:none; font-size:14px;">Logout</a>
+        <strong>Aman Portal</strong>
+        <a href="/logout" style="color:white; text-decoration:none;">Logout</a>
     </div>
 
-    <div class="add-box">
+    <div class="profile-card">
+        <strong>My Profile:</strong><br>
+        Name: {{ current_user.username }} | Mobile: {{ current_user.mobile }}
+    </div>
+
+    <div class="add-section">
         <form action="/add_contact" method="POST">
-            <input name="mobile" placeholder="Enter Mobile Number" required>
+            <input name="mobile" placeholder="Search Mobile..." required>
             <button type="submit">Add</button>
         </form>
-        {% with messages = get_flashed_messages() %}{% if messages %}<p class="flash">{{ messages[0] }}</p>{% endif %}{% endwith %}
     </div>
 
-    <div class="user-list">
-        {% if contacts %}
-            {% for c in contacts %}
-            <a href="/chat/{{ c.contact_username }}" class="user-item">
-                <div class="avatar">{{ c.contact_username[0]|upper }}</div>
-                <div>
-                    <strong>{{ c.contact_username }}</strong><br>
-                    <small>+91 {{ c.contact_mobile }}</small>
-                </div>
-            </a>
-            {% endfor %}
-        {% else %}
-            <p style="text-align: center; color: gray; margin-top: 50px;">No contacts. Add someone using their mobile number!</p>
-        {% endif %}
+    <div class="section-title">Saved Contacts</div>
+    {% for c in contacts %}
+    <div class="user-item">
+        <a href="/chat/{{ c.contact_username }}" class="user-info">
+            <div class="avatar">{{ c.contact_username[0]|upper }}</div>
+            <div>
+                <strong>{{ c.contact_username }}</strong><br>
+                <small>+91 {{ c.contact_mobile }}</small>
+            </div>
+        </a>
+        <a href="/delete_contact/{{ c.id }}" class="del-btn" onclick="return confirm('Remove contact?')">×</a>
     </div>
+    {% endfor %}
+
+    {% if unknown %}
+    <div class="section-title">Unknown Messages</div>
+    {% for u in unknown %}
+    <div class="user-item">
+        <a href="/chat/{{ u.username }}" class="user-info">
+            <div class="avatar" style="background:#607d8b;">{{ u.username[0]|upper }}</div>
+            <div>
+                <strong>{{ u.username }}</strong> <span class="unknown-tag">New</span><br>
+                <small>+91 {{ u.mobile }}</small>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+    {% endif %}
 </body>
-    </html>
-    
+                                                                                          </html>
+                                                                                          
