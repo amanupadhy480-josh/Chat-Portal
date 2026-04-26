@@ -5,44 +5,29 @@
     <title>Chat</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        :root { --bg: #e5ddd5; --header: #075e54; --sent: #dcf8c6; --text-color: #000; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); background-attachment: fixed; background-size: cover; display: flex; flex-direction: column; height: 100vh; transition: 0.3s; }
-        .header { background: var(--header); color: white; padding: 10px 15px; display: flex; align-items: center; justify-content: space-between; }
+        :root { --bg: #e5ddd5; --header: #075e54; --sent: #dcf8c6; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); background-size: cover; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: var(--header); color: white; padding: 8px 15px; display: flex; align-items: center; gap: 10px; }
+        .header-dp { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
         
         #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; list-style: none; margin: 0; }
-        .msg { padding: 8px 12px; margin: 5px 0; border-radius: 8px; max-width: 80%; position: relative; font-size: 15px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg { padding: 8px 12px; margin: 5px 0; border-radius: 8px; max-width: 80%; font-size: 15px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
         .sent { background: var(--sent); align-self: flex-end; }
         .received { background: white; align-self: flex-start; }
         .time { font-size: 9px; color: #888; display: block; text-align: right; margin-top: 3px; }
 
-        #form { display: flex; padding: 10px; background: #f0f0f0; }
+        #form { display: flex; padding: 10px; background: #f0f0f0; gap: 5px; }
         #input { flex: 1; border-radius: 20px; border: 1px solid #ddd; padding: 10px 15px; outline: none; }
-        
-        /* Theme Menu */
-        .theme-panel { display: none; position: absolute; top: 50px; right: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); z-index: 100; }
-        .color-dot { width: 30px; height: 30px; border-radius: 50%; display: inline-block; margin: 5px; cursor: pointer; border: 1px solid #ddd; }
+        .send-btn { background: var(--header); color: white; border: none; border-radius: 50%; width: 45px; height: 45px; cursor: pointer; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div style="display:flex; align-items:center;">
-            <a href="/" style="color:white; text-decoration:none; font-size:24px; margin-right:15px;">‹</a>
-            <div>
-                <strong>{{ recipient }}</strong><br>
-                <small style="font-size:10px;">+91 {{ recipient_mobile }}</small>
-            </div>
-        </div>
-        <div style="position:relative;">
-            <button onclick="toggleThemePanel()" style="background:none; border:none; color:white; font-size:20px; cursor:pointer;">🎨</button>
-            <div id="themePanel" class="theme-panel">
-                <div class="color-dot" style="background:#075e54;" onclick="setTheme('#e5ddd5', '#075e54', '#dcf8c6')"></div>
-                <div class="color-dot" style="background:#2196F3;" onclick="setTheme('#E3F2FD', '#1976D2', '#BBDEFB')"></div>
-                <div class="color-dot" style="background:#E91E63;" onclick="setTheme('#FCE4EC', '#C2185B', '#F8BBD0')"></div>
-                <div class="color-dot" style="background:#212121;" onclick="setTheme('#121212', '#000000', '#333333')"></div>
-                <div class="color-dot" style="background:#9C27B0;" onclick="setTheme('#F3E5F5', '#7B1FA2', '#E1BEE7')"></div>
-                <hr>
-                <button onclick="pickGalleryImage()" style="width:100%; border:none; background:#eee; padding:5px; border-radius:4px; font-size:12px; cursor:pointer;">Gallery BG</button>
-            </div>
+        <a href="/" style="color:white; text-decoration:none; font-size:24px;">‹</a>
+        <img src="/uploads/{{ recipient_dp }}" class="header-dp">
+        <div style="flex:1">
+            <strong>{{ recipient }}</strong><br>
+            <small style="font-size:10px;">+91 {{ recipient_mobile }}</small>
         </div>
     </div>
 
@@ -57,7 +42,7 @@
 
     <form id="form">
         <input id="input" autocomplete="off" placeholder="Type a message..." required>
-        <button type="submit" style="background:var(--header); color:white; border:none; border-radius:50%; width:40px; height:40px; margin-left:5px;">➤</button>
+        <button type="submit" class="send-btn">➤</button>
     </form>
 
     <script>
@@ -65,47 +50,21 @@
         var recipient = "{{ recipient }}";
         var me = "{{ current_user.username }}";
 
-        // Load saved background and theme
+        // Restore Theme/BG
         window.onload = function() {
             let savedBg = localStorage.getItem('chat-bg-image');
-            if(savedBg) { document.body.style.backgroundImage = `url(${savedBg})`; }
+            if(savedBg) document.body.style.backgroundImage = `url(${savedBg})`;
             let theme = JSON.parse(localStorage.getItem('chat-theme'));
-            if(theme) { setTheme(theme.bg, theme.header, theme.sent, false); }
+            if(theme) setTheme(theme.bg, theme.header, theme.sent);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
         }
 
-        function toggleThemePanel() {
-            let p = document.getElementById('themePanel');
-            p.style.display = p.style.display === 'block' ? 'none' : 'block';
-        }
-
-        function setTheme(bg, header, sent, save = true) {
+        function setTheme(bg, header, sent) {
             document.documentElement.style.setProperty('--bg', bg);
             document.documentElement.style.setProperty('--header', header);
             document.documentElement.style.setProperty('--sent', sent);
-            if(save) {
-                localStorage.setItem('chat-theme', JSON.stringify({bg, header, sent}));
-                document.getElementById('themePanel').style.display = 'none';
-            }
         }
 
-        function pickGalleryImage() {
-            let input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = e => {
-                let file = e.target.files[0];
-                let reader = new FileReader();
-                reader.onload = event => {
-                    let res = event.target.result;
-                    document.body.style.backgroundImage = `url(${res})`;
-                    localStorage.setItem('chat-bg-image', res);
-                }
-                reader.readAsDataURL(file);
-            }
-            input.click();
-        }
-
-        // Socket logic (Keep same)
         document.getElementById('form').addEventListener('submit', function(e) {
             e.preventDefault();
             var input = document.getElementById('input');
@@ -126,5 +85,4 @@
         });
     </script>
 </body>
-                    </html>
-    
+</html>
