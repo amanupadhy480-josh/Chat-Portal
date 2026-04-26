@@ -1,31 +1,34 @@
 import os
 from datetime import datetime
-from flask import Flask, render_template, redirect, url_for, request, flash
+from flask import Flask, render_template, redirect, url_for, request, flash, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'aman_portal_2026')
+app.config['SECRET_KEY'] = 'aman_portal_2026'
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 # 2MB Limit
 
+# Database setup
 uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
-if uri.startswith("postgres://"):
-    uri = uri.replace("postgres://", "postgresql://", 1)
+if uri.startswith("postgres://"): uri = uri.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = uri
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     mobile = db.Column(db.String(15), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
+    profile_pic = db.Column(db.String(200), default='default_dp.png')
 
 class Contact(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -41,41 +44,71 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+def load_user(user_id): return User.query.get(int(user_id))
+
+# Routes
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/update_dp', methods=['POST'])
+@login_required
+def update_dp():
+    if 'file' not in request.files: return redirect(url_for('home'))
+    file = request.files['file']
+    if file.filename == '': return redirect(url_for('home'))
+    
+    filename = secure_filename(f"{current_user.id}_{file.filename}")
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    
+    user = User.query.get(current_user.id)
+    user.profile_pic = filename
+    db.session.commit()
+    return redirect(url_for('home'))
 
 @app.route('/')
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    saved_mobiles = [c.contact_mobile for c in contacts]
+    # Adding DP info to contacts
+    contact_list = []
+    for c in contacts:
+        u = User.query.filter_by(mobile=c.contact_mobile).first()
+        contact_list.append({'id': c.id, 'username': c.contact_username, 'mobile': c.contact_mobile, 'dp': u.profile_pic if u else 'default_dp.png'})
     
-    # Unknown messengers logic
     unknown_msgs = Message.query.filter_by(receiver=current_user.username).all()
     unknown_users = []
-    seen_mobiles = set()
+    seen = set([c.contact_mobile for c in contacts])
     for m in unknown_msgs:
-        u_info = User.query.filter_by(username=m.sender).first()
-        if u_info and u_info.mobile not in saved_mobiles and u_info.mobile not in seen_mobiles:
-            unknown_users.append({'username': u_info.username, 'mobile': u_info.mobile})
-            seen_mobiles.add(u_info.mobile)
+        u = User.query.filter_by(username=m.sender).first()
+        if u and u.mobile not in seen:
+            unknown_users.append({'username': u.username, 'mobile': u.mobile, 'dp': u.profile_pic})
+            seen.add(u.mobile)
+            
+    return render_template('home.html', contacts=contact_list, unknown=unknown_users)
 
-    return render_template('home.html', contacts=contacts, unknown=unknown_users)
+@app.route('/chat/<recipient>')
+@login_required
+def chat(recipient):
+    target_user = User.query.filter_by(username=recipient).first()
+    messages = Message.query.filter(
+        ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
+        ((Message.sender == recipient) & (Message.receiver == current_user.username))
+    ).order_by(Message.timestamp.asc()).all()
+    return render_template('index.html', recipient=recipient, recipient_mobile=target_user.mobile, recipient_dp=target_user.profile_pic, saved_messages=messages)
 
+# Reuse existing routes for login, signup, logout, add_contact, delete_contact/account...
 @app.route('/add_contact', methods=['POST'])
 @login_required
 def add_contact():
     mobile = request.form.get('mobile')
     user_to_add = User.query.filter_by(mobile=mobile).first()
-    if user_to_add:
-        if user_to_add.id == current_user.id:
-            flash("You can't add yourself!")
-        else:
-            exists = Contact.query.filter_by(user_id=current_user.id, contact_mobile=mobile).first()
-            if not exists:
-                new_c = Contact(user_id=current_user.id, contact_username=user_to_add.username, contact_mobile=mobile)
-                db.session.add(new_c)
-                db.session.commit()
+    if user_to_add and user_to_add.id != current_user.id:
+        exists = Contact.query.filter_by(user_id=current_user.id, contact_mobile=mobile).first()
+        if not exists:
+            new_c = Contact(user_id=current_user.id, contact_username=user_to_add.username, contact_mobile=mobile)
+            db.session.add(new_c)
+            db.session.commit()
     return redirect(url_for('home'))
 
 @app.route('/reject_unknown/<username>')
@@ -105,17 +138,6 @@ def delete_account():
     logout_user()
     return redirect(url_for('signup'))
 
-@app.route('/chat/<recipient>')
-@login_required
-def chat(recipient):
-    target_user = User.query.filter_by(username=recipient).first()
-    messages = Message.query.filter(
-        ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
-        ((Message.sender == recipient) & (Message.receiver == current_user.username))
-    ).order_by(Message.timestamp.asc()).all()
-    return render_template('index.html', recipient=recipient, recipient_mobile=target_user.mobile if target_user else "", saved_messages=messages)
-
-# Login, Signup, Logout routes (Keep them as they are in your source)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -153,15 +175,10 @@ def handle_msg(data):
     new_msg = Message(content=data['message'], sender=current_user.username, receiver=data['recipient'])
     db.session.add(new_msg)
     db.session.commit()
-    emit('new_msg', {
-        'msg': data['message'], 
-        'sender': current_user.username, 
-        'recipient': data['recipient']
-    }, broadcast=True)
-
-with app.app_context():
-    db.create_all()
+    emit('new_msg', {'msg': data['message'], 'sender': current_user.username, 'recipient': data['recipient']}, broadcast=True)
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    if not os.path.exists('uploads'): os.makedirs('uploads')
+    with app.app_context(): db.create_all()
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
     
