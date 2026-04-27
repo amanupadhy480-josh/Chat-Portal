@@ -1,5 +1,5 @@
 import eventlet
-eventlet.monkey_patch()
+eventlet.monkey_patch()  # Sabse pehle hona zaroori hai
 
 import os
 from datetime import datetime
@@ -15,12 +15,22 @@ app.config['SECRET_KEY'] = 'aman_portal_2026'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 
 
-# Database fix for Render/SQLAlchemy
+# Database Configuration
 uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
-if uri.startswith("postgres://"): uri = uri.replace("postgres://", "postgresql://", 1)
+if uri.startswith("postgres://"): 
+    uri = uri.replace("postgres://", "postgresql://", 1)
+
 app.config['SQLALCHEMY_DATABASE_URI'] = uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
+
+# SQLite specific fix for multi-threading/eventlet
+if uri.startswith("sqlite"):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        "connect_args": {"check_same_thread": False},
+        "pool_pre_ping": True
+    }
+else:
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
 
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
@@ -28,7 +38,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Models (Same as before)
+# Models
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
@@ -50,9 +60,10 @@ class Message(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
-def load_user(user_id): return User.query.get(int(user_id))
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-# Routes... (Sab purana wala kaam karega)
+# Routes
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -63,9 +74,12 @@ def update_dp():
     if 'file' not in request.files: return redirect(url_for('home'))
     file = request.files['file']
     if file.filename == '': return redirect(url_for('home'))
+    
     filename = secure_filename(f"{current_user.id}_{file.filename}")
-    if not os.path.exists(app.config['UPLOAD_FOLDER']): os.makedirs(app.config['UPLOAD_FOLDER'])
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    
     user = User.query.get(current_user.id)
     user.profile_pic = filename
     db.session.commit()
@@ -75,18 +89,36 @@ def update_dp():
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    contact_list = [{'id': c.id, 'username': c.contact_username, 'mobile': c.contact_mobile, 
-                     'dp': User.query.filter_by(mobile=c.contact_mobile).first().profile_pic if User.query.filter_by(mobile=c.contact_mobile).first() else 'default_dp.png'} for c in contacts]
-    return render_template('home.html', contacts=contact_list)
+    contact_list = []
+    for c in contacts:
+        u = User.query.filter_by(mobile=c.contact_mobile).first()
+        contact_list.append({
+            'id': c.id, 
+            'username': c.contact_username, 
+            'mobile': c.contact_mobile, 
+            'dp': u.profile_pic if u else 'default_dp.png'
+        })
+    return render_template('home.html', contacts=contact_list, unknown=[])
+
+@app.route('/chat/<recipient>')
+@login_required
+def chat(recipient):
+    target = User.query.filter_by(username=recipient).first()
+    if not target: return redirect(url_for('home'))
+    msgs = Message.query.filter(
+        ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
+        ((Message.sender == recipient) & (Message.receiver == current_user.username))
+    ).order_by(Message.timestamp.asc()).all()
+    return render_template('index.html', recipient=recipient, recipient_mobile=target.mobile, recipient_dp=target.profile_pic, saved_messages=msgs)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         user = User.query.filter_by(mobile=request.form.get('mobile')).first()
         if user and check_password_hash(user.password, request.form.get('password')):
-            login_user(user)
+            login_user(user, remember=True)
             return redirect(url_for('home'))
-        flash('Login Failed')
+        flash('Invalid mobile or password')
     return render_template('login.html')
 
 @app.route('/signup', methods=['GET', 'POST'])
@@ -104,7 +136,15 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+@socketio.on('private_message')
+def handle_msg(data):
+    msg = Message(content=data['message'], sender=current_user.username, receiver=data['recipient'])
+    db.session.add(msg)
+    db.session.commit()
+    emit('new_msg', {'msg': data['message'], 'sender': current_user.username, 'recipient': data['recipient']}, broadcast=True)
+
 if __name__ == '__main__':
-    with app.app_context(): db.create_all()
+    with app.app_context():
+        db.create_all()
     socketio.run(app, debug=True)
     
