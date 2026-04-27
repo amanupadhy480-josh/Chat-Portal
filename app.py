@@ -10,14 +10,22 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'aman_portal_2026'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 # 2MB Limit
+# Buffer size ko 5MB kar diya hai badi photos ke liye
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 
 
 # Database setup
 uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
 if uri.startswith("postgres://"): uri = uri.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = uri
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Timeout fix: max_http_buffer_size aur ping_timeout badhaya gaya hai
+socketio = SocketIO(app, 
+    cors_allowed_origins="*", 
+    async_mode='eventlet', 
+    engineio_logger=True, 
+    max_http_buffer_size=5 * 1024 * 1024,
+    ping_timeout=60)
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -58,7 +66,10 @@ def update_dp():
     file = request.files['file']
     if file.filename == '': return redirect(url_for('home'))
     
+    # Image save logic for Gallery upload
     filename = secure_filename(f"{current_user.id}_{file.filename}")
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     
     user = User.query.get(current_user.id)
@@ -70,7 +81,6 @@ def update_dp():
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    # Adding DP info to contacts
     contact_list = []
     for c in contacts:
         u = User.query.filter_by(mobile=c.contact_mobile).first()
@@ -97,7 +107,6 @@ def chat(recipient):
     ).order_by(Message.timestamp.asc()).all()
     return render_template('index.html', recipient=recipient, recipient_mobile=target_user.mobile, recipient_dp=target_user.profile_pic, saved_messages=messages)
 
-# Reuse existing routes for login, signup, logout, add_contact, delete_contact/account...
 @app.route('/add_contact', methods=['POST'])
 @login_required
 def add_contact():
@@ -110,33 +119,6 @@ def add_contact():
             db.session.add(new_c)
             db.session.commit()
     return redirect(url_for('home'))
-
-@app.route('/reject_unknown/<username>')
-@login_required
-def reject_unknown(username):
-    Message.query.filter_by(sender=username, receiver=current_user.username).delete()
-    db.session.commit()
-    return redirect(url_for('home'))
-
-@app.route('/delete_contact/<int:id>')
-@login_required
-def delete_contact(id):
-    c = Contact.query.get(id)
-    if c and c.user_id == current_user.id:
-        db.session.delete(c)
-        db.session.commit()
-    return redirect(url_for('home'))
-
-@app.route('/delete_account', methods=['POST'])
-@login_required
-def delete_account():
-    user = User.query.get(current_user.id)
-    Contact.query.filter_by(user_id=user.id).delete()
-    Message.query.filter((Message.sender == user.username) | (Message.receiver == user.username)).delete()
-    db.session.delete(user)
-    db.session.commit()
-    logout_user()
-    return redirect(url_for('signup'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -181,4 +163,4 @@ if __name__ == '__main__':
     if not os.path.exists('uploads'): os.makedirs('uploads')
     with app.app_context(): db.create_all()
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
-    
+                               
