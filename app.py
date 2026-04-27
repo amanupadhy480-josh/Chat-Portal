@@ -1,5 +1,6 @@
-import eventlet
-eventlet.monkey_patch()  # Sabse pehle hona zaroori hai
+# Eventlet hata kar gevent use karein, ye zyada stable hai
+from gevent import monkey
+monkey.patch_all()
 
 import os
 from datetime import datetime
@@ -23,17 +24,15 @@ if uri.startswith("postgres://"):
 app.config['SQLALCHEMY_DATABASE_URI'] = uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# SQLite specific fix for multi-threading/eventlet
-if uri.startswith("sqlite"):
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        "connect_args": {"check_same_thread": False},
-        "pool_pre_ping": True
-    }
-else:
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {"pool_pre_ping": True}
+# Threading fix for SQLite on Render
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "connect_args": {"check_same_thread": False} if uri.startswith("sqlite") else {},
+    "pool_pre_ping": True
+}
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+# Gevent mode enable kiya gaya hai
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -63,7 +62,7 @@ class Message(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Routes
+# --- Routes ---
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -99,17 +98,6 @@ def home():
             'dp': u.profile_pic if u else 'default_dp.png'
         })
     return render_template('home.html', contacts=contact_list, unknown=[])
-
-@app.route('/chat/<recipient>')
-@login_required
-def chat(recipient):
-    target = User.query.filter_by(username=recipient).first()
-    if not target: return redirect(url_for('home'))
-    msgs = Message.query.filter(
-        ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
-        ((Message.sender == recipient) & (Message.receiver == current_user.username))
-    ).order_by(Message.timestamp.asc()).all()
-    return render_template('index.html', recipient=recipient, recipient_mobile=target.mobile, recipient_dp=target.profile_pic, saved_messages=msgs)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -147,4 +135,3 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     socketio.run(app, debug=True)
-    
