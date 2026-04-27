@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()  # Ye line sabse upar honi chahiye taaki error na aaye
+
 import os
 from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, request, flash, send_from_directory
@@ -10,22 +13,16 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'aman_portal_2026'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-# Buffer size ko 5MB kar diya hai badi photos ke liye
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 # 5MB limit gallery photos ke liye
 
 # Database setup
 uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
 if uri.startswith("postgres://"): uri = uri.replace("postgres://", "postgresql://", 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = uri
-db = SQLAlchemy(app)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Error kam karne ke liye
 
-# Timeout fix: max_http_buffer_size aur ping_timeout badhaya gaya hai
-socketio = SocketIO(app, 
-    cors_allowed_origins="*", 
-    async_mode='eventlet', 
-    engineio_logger=True, 
-    max_http_buffer_size=5 * 1024 * 1024,
-    ping_timeout=60)
+db = SQLAlchemy(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -54,7 +51,8 @@ class Message(db.Model):
 @login_manager.user_loader
 def load_user(user_id): return User.query.get(int(user_id))
 
-# Routes
+# --- ROUTES ---
+
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -66,7 +64,6 @@ def update_dp():
     file = request.files['file']
     if file.filename == '': return redirect(url_for('home'))
     
-    # Image save logic for Gallery upload
     filename = secure_filename(f"{current_user.id}_{file.filename}")
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -84,7 +81,12 @@ def home():
     contact_list = []
     for c in contacts:
         u = User.query.filter_by(mobile=c.contact_mobile).first()
-        contact_list.append({'id': c.id, 'username': c.contact_username, 'mobile': c.contact_mobile, 'dp': u.profile_pic if u else 'default_dp.png'})
+        contact_list.append({
+            'id': c.id, 
+            'username': c.contact_username, 
+            'mobile': c.contact_mobile, 
+            'dp': u.profile_pic if u else 'default_dp.png'
+        })
     
     unknown_msgs = Message.query.filter_by(receiver=current_user.username).all()
     unknown_users = []
@@ -101,6 +103,7 @@ def home():
 @login_required
 def chat(recipient):
     target_user = User.query.filter_by(username=recipient).first()
+    if not target_user: return redirect(url_for('home'))
     messages = Message.query.filter(
         ((Message.sender == current_user.username) & (Message.receiver == recipient)) |
         ((Message.sender == recipient) & (Message.receiver == current_user.username))
@@ -163,4 +166,4 @@ if __name__ == '__main__':
     if not os.path.exists('uploads'): os.makedirs('uploads')
     with app.app_context(): db.create_all()
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
-                               
+    
