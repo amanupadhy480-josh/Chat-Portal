@@ -1,133 +1,87 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aman Portal - Home</title>
+    <title>Aman Portal - Contacts</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f0f2f5; }
-        .header { background: #075e54; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top:0; z-index:10; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        :root { --main: #075e54; --bg: #e5ddd5; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); transition: 0.3s; }
+        .navbar { background: var(--main); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .user-item { background: white; margin: 8px; padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .dp-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--main); }
+        .search-box { width: 90%; margin: 15px auto; display: block; padding: 12px; border-radius: 25px; border: none; outline: none; }
+        .settings-btn { cursor: pointer; font-size: 20px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .online { background: #25d366; }
+        .offline { background: #bbb; }
         
-        .profile-section { background: #128c7e; color: white; padding: 20px; display: flex; align-items: center; gap: 15px; }
-        .profile-dp { width: 65px; height: 65px; border-radius: 50%; object-fit: cover; border: 2px solid white; cursor: pointer; transition: 0.3s; }
-        .profile-dp:hover { opacity: 0.8; }
-        
-        .search-container { background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; }
-        .search-box { width: 100%; padding: 12px; border-radius: 20px; border: 1px solid #ddd; outline: none; background: #f0f2f5; box-sizing: border-box; }
-
-        .section-title { padding: 15px 15px 5px; font-size: 13px; color: #128c7e; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
-        .user-item { background: white; padding: 12px 15px; display: flex; align-items: center; border-bottom: 1px solid #f0f0f0; transition: 0.2s; text-decoration: none; color: inherit; }
-        .user-item:active { background: #ebebeb; }
-        .item-dp { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; margin-right: 15px; }
-        .user-info { flex: 1; }
-        .user-info strong { font-size: 16px; display: block; margin-bottom: 2px; }
-        .user-info small { color: #666; }
-        
-        .action-btn { padding: 8px 16px; border-radius: 20px; border: none; font-size: 13px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-accept { background: #25D366; color: white; margin-right: 5px; }
-        .btn-accept:hover { background: #1da851; }
-
-        .flash-messages { padding: 10px 15px; }
-        .alert { padding: 10px; background: #fff3cd; color: #856404; border-radius: 5px; border: 1px solid #ffeeba; margin-bottom: 10px; font-size: 14px; }
-        
-        .empty-state { text-align: center; padding: 40px 20px; color: #888; }
-        .empty-state i { font-size: 48px; margin-bottom: 10px; display: block; opacity: 0.5; }
+        /* Settings Modal */
+        #settingsModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; width: 80%; max-width: 350px; box-shadow: 0 0 100px rgba(0,0,0,0.5); z-index: 1000; }
+        .btn-del { background: #ff4d4d; color: white; border: none; padding: 10px; width: 100%; border-radius: 5px; margin-top: 15px; }
     </style>
 </head>
 <body>
-    <div class="header">
+    <div class="navbar">
         <strong>Aman Portal</strong>
-        <a href="/logout" style="color:white; text-decoration:none;"><i class="bi bi-box-arrow-right" style="font-size: 20px;"></i></a>
+        <i class="bi bi-gear-fill settings-btn" onclick="toggleSettings()"></i>
     </div>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-messages">
-          {% for message in messages %}
-            <div class="alert">{{ message }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <input type="text" id="search" class="search-box" placeholder="🔍 Search or Add Mobile..." onkeyup="filterUsers()">
 
-    <div class="profile-section">
-        <form id="dp-form" action="/update_dp" method="POST" enctype="multipart/form-data">
-            <input type="file" id="dp-input" name="file" accept="image/*" style="display:none" onchange="handleFileUpload()">
-            <img src="/uploads/{{ current_user.profile_pic }}" class="profile-dp" onclick="document.getElementById('dp-input').click()" title="Click to change DP">
-        </form>
-        <div>
-            <div style="font-weight:bold; font-size:18px;">{{ current_user.username }}</div>
-            <small><i class="bi bi-phone"></i> +91 {{ current_user.mobile }}</small>
-        </div>
-    </div>
-
-    <div class="search-container">
-        <input type="text" id="searchInput" class="search-box" placeholder="🔍 Search contacts or add mobile..." onkeyup="filterContacts()">
-    </div>
-
-    {% if unknown %}
-    <div class="section-title">New Requests</div>
-    <div id="requestList">
-        {% for u in unknown %}
+    <div id="contactList">
+        {% for c in contacts %}
         <div class="user-item">
-            <img src="/uploads/{{ u.dp }}" class="item-dp">
-            <div class="user-info">
-                <strong>{{ u.username }}</strong>
-                <small>Sent you a message</small>
+            <img src="/uploads/{{ c.contact_mobile }}_dp.png" onerror="this.src='/static/default_dp.png'" class="dp-img">
+            <div style="flex:1" onclick="location.href='/chat/{{ c.contact_username }}'">
+                <strong>{{ c.contact_username }}</strong><br>
+                <small>+91 {{ c.contact_mobile }}</small>
             </div>
-            <form action="/add_contact" method="POST" style="margin: 0;">
-                <input type="hidden" name="mobile" value="{{ u.mobile }}">
-                <button type="submit" class="action-btn btn-accept">Accept</button>
-            </form>
+            <a href="/delete_contact/{{ c.id }}" style="color:red" onclick="return confirm('Remove contact?')"><i class="bi bi-trash"></i></a>
         </div>
         {% endfor %}
     </div>
-    {% endif %}
 
-    <div class="section-title">My Contacts</div>
-    <div id="contactList">
-        {% if contacts %}
-            {% for c in contacts %}
-            <div class="user-item-wrapper">
-                <div class="user-item">
-                    <img src="/uploads/{{ c.dp }}" class="item-dp">
-                    <a href="/chat/{{ c.username }}" class="user-info" style="text-decoration: none; color: black;">
-                        <strong>{{ c.username }}</strong>
-                        <small>+91 {{ c.mobile }}</small>
-                    </a>
-                    <a href="/delete_contact/{{ c.id }}" style="color:#ff4d4d; padding: 10px;" onclick="return confirm('Remove contact?')">
-                        <i class="bi bi-trash"></i>
-                    </a>
-                </div>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <i class="bi bi-person-plus"></i>
-                No contacts yet. Search a number to start chatting!
-            </div>
-        {% endif %}
+    <div id="settingsModal">
+        <h3>Account Settings</h3>
+        <hr>
+        <label>Theme Background:</label>
+        <input type="color" id="colorPicker" onchange="changeTheme(this.value)" style="width: 100%; height: 40px;">
+        
+        <form action="/add_contact" method="POST" style="margin-top:15px;">
+            <input name="mobile" placeholder="Add Mobile Number" required style="width:90%; padding:8px;">
+            <button type="submit" style="width:100%; margin-top:5px; background:var(--main); color:white; border:none; padding:8px;">Add Contact</button>
+        </form>
+
+        <form action="/delete_account" method="POST" onsubmit="return confirm('Account permanently delete karein?')">
+            <button class="btn-del">Delete My Account</button>
+        </form>
+        <button onclick="toggleSettings()" style="width:100%; margin-top:10px; border:none; padding:8px;">Close</button>
     </div>
 
     <script>
-        function handleFileUpload() {
-            const fileInput = document.getElementById('dp-input');
-            if (fileInput.files.length > 0) {
-                document.getElementById('dp-form').submit();
-            }
+        function toggleSettings() {
+            let m = document.getElementById('settingsModal');
+            m.style.display = m.style.display === 'block' ? 'none' : 'block';
         }
 
-        function filterContacts() {
-            let input = document.getElementById('searchInput').value.toLowerCase();
-            let wrappers = document.getElementsByClassName('user-item-wrapper');
-            
-            for (let wrapper of wrappers) {
-                let text = wrapper.innerText.toLowerCase();
-                wrapper.style.display = text.includes(input) ? "block" : "none";
+        function changeTheme(color) {
+            document.body.style.backgroundColor = color;
+            localStorage.setItem('portal-bg', color);
+        }
+
+        window.onload = () => {
+            let savedColor = localStorage.getItem('portal-bg');
+            if(savedColor) document.body.style.backgroundColor = savedColor;
+        }
+
+        function filterUsers() {
+            let input = document.getElementById('search').value.toLowerCase();
+            let items = document.getElementsByClassName('user-item');
+            for (let item of items) {
+                item.style.display = item.innerText.toLowerCase().includes(input) ? "flex" : "none";
             }
         }
     </script>
 </body>
-    </html>
-    
+</html>
