@@ -1,66 +1,118 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat</title>
+    <title>Chat with {{ r_name }}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
     <style>
-        body { font-family: sans-serif; margin: 0; background: #e5ddd5; height: 100vh; display: flex; flex-direction: column; }
-        .header { background: #075e54; color: white; padding: 10px; display: flex; align-items: center; gap: 10px; }
-        #msgs { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .m { padding: 8px 12px; border-radius: 8px; max-width: 75%; font-size: 15px; }
-        .sent { background: #dcf8c6; align-self: flex-end; }
-        .recv { background: white; align-self: flex-start; }
-        .input-area { background: #f0f0f0; padding: 10px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 10px; border-radius: 20px; border: 1px solid #ddd; outline: none; }
+        :root { --wa-green: #075e54; --wa-light: #dcf8c6; --bg-chat: #e5ddd5; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg-chat); height: 100vh; display: flex; flex-direction: column; }
+        
+        .header { background: var(--wa-green); color: white; padding: 10px 15px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
+        .header a { color: white; text-decoration: none; font-size: 20px; }
+        .header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #eee; }
+        
+        #msgs { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+        
+        .m { padding: 8px 12px; border-radius: 10px; max-width: 75%; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .sent { align-self: flex-end; background: var(--wa-light); border-top-right-radius: 2px; }
+        .recv { align-self: flex-start; background: white; border-top-left-radius: 2px; }
+        
+        .msg-info { font-size: 10px; color: #888; text-align: right; margin-top: 4px; display: flex; justify-content: flex-end; align-items: center; gap: 3px; }
+        .tick { color: #34b7f1; font-weight: bold; }
+        
+        .input-area { background: #f0f0f0; padding: 10px; display: flex; gap: 10px; align-items: center; }
+        #i { flex: 1; border: none; padding: 12px 15px; border-radius: 25px; outline: none; font-size: 15px; }
+        .send-btn { background: none; border: none; color: var(--wa-green); font-size: 25px; cursor: pointer; padding: 0 5px; }
+        
+        .attachment-link { color: #075e54; text-decoration: none; font-weight: bold; display: block; padding: 5px 0; }
     </style>
 </head>
 <body>
+
     <div class="header">
-        <a href="/" style="color:white; text-decoration:none;">←</a>
-        <img src="/uploads/{{ recipient.profile_pic }}" style="width:40px; height:40px; border-radius:50%;">
-        <div>
-            <strong>{{ recipient.username }}</strong><br>
-            <small id="status">{% if recipient.is_online %}Online{% else %}Offline{% endif %}</small>
+        <a href="/"><i class="bi bi-chevron-left"></i></a>
+        <img src="/static/uploads/default_dp.png" alt="dp">
+        <div style="flex: 1;">
+            <strong>{{ r_name }}</strong><br>
+            <small style="font-size: 10px; opacity: 0.8;">Online</small>
         </div>
-        <i class="bi bi-telephone-fill" style="margin-left:auto;"></i>
+        <i class="bi bi-telephone-fill"></i>
     </div>
 
     <div id="msgs">
         {% for m in messages %}
-        <div class="m {% if m.sender == current_user.username %}sent{% else %}recv{% endif %}">
-            {{ m.content }}
+        <div class="m {% if m.sender == current_user.mobile %}sent{% else %}recv{% endif %}">
+            {% if m.file_path %}
+                <a href="/static/uploads/{{ m.file_path }}" class="attachment-link" target="_blank">
+                    <i class="bi bi-file-earmark-arrow-down"></i> Attachment
+                </a>
+            {% else %}
+                {{ m.content }}
+            {% endif %}
+            
+            <div class="msg-info">
+                {{ m.timestamp.strftime('%H:%M') }} 
+                {% if m.sender == current_user.mobile %}
+                    <span class="tick">✓✓</span>
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
 
-    <form class="input-area" id="f">
-        <i class="bi bi-paperclip" onclick="alert('File sharing logic uses send_file route')"></i>
+    <div class="input-area">
+        <i class="bi bi-paperclip" style="font-size: 22px; cursor: pointer; color: #555;" onclick="document.getElementById('file-up').click()"></i>
         <input id="i" placeholder="Type a message..." autocomplete="off">
-        <button type="submit" style="border:none; background:none; color:#075e54; font-size:20px;">➤</button>
+        <button class="send-btn" onclick="send()">
+            <i class="bi bi-send-fill"></i>
+        </button>
+    </div>
+
+    <form id="file-form" action="/send_file" method="POST" enctype="multipart/form-data" style="display:none;">
+        <input type="file" name="file" id="file-up" onchange="this.form.submit()">
+        <input type="hidden" name="r_mobile" value="{{ r_mobile }}">
     </form>
 
     <script>
         var socket = io();
-        var recipient = "{{ recipient.username }}";
-        
-        document.getElementById('f').onsubmit = (e) => {
-            e.preventDefault();
-            let i = document.getElementById('i');
-            if(i.value) {
-                socket.emit('private_message', { message: i.value, recipient: recipient });
-                i.value = '';
+        var me = "{{ current_user.mobile }}";
+        var target = "{{ r_mobile }}";
+
+        // Scroll to bottom on load
+        var msgDiv = document.getElementById('msgs');
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+
+        function send() {
+            let input = document.getElementById('i');
+            if(input.value.trim() !== "") {
+                socket.emit('private_message', {
+                    message: input.value, 
+                    recipient: target, 
+                    sender: me
+                });
+                input.value = '';
             }
-        };
+        }
+
+        // Enter key to send
+        document.getElementById('i').addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                send();
+            }
+        });
 
         socket.on('new_msg', (data) => {
-            let div = document.createElement('div');
-            div.className = `m ${data.sender === "{{ current_user.username }}" ? 'sent' : 'recv'}`;
-            div.innerText = data.msg;
-            document.getElementById('msgs').appendChild(div);
-            document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
+            // Check if msg belongs to this chat
+            if((data.sender == me && data.recipient == target) || (data.sender == target && data.recipient == me)) {
+                // Reload to sync with DB and show ticks/files correctly
+                location.reload(); 
+            }
         });
     </script>
+
 </body>
 </html>
