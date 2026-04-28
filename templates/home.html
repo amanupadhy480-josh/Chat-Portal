@@ -2,51 +2,52 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aman Portal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         :root { --main: #075e54; --bg: #e5ddd5; }
-        body { font-family: sans-serif; margin: 0; background: var(--bg); transition: 0.3s; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg); }
         .nav { background: var(--main); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .list { padding: 10px; }
-        .contact-card { background: white; padding: 12px; margin-bottom: 8px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; }
+        .contact-card { background: white; padding: 12px; margin: 8px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .dp { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; background: #ddd; }
-        .search { width: 90%; margin: 15px auto; display: block; padding: 12px; border-radius: 25px; border: none; }
-        #settings { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:15px; width:85%; z-index:100; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .online { background: #25d366; } .offline { background: #bbb; }
+        #modal { display:none; position:fixed; top:20%; left:5%; width:90%; background:white; padding:20px; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
     <div class="nav">
         <strong>Aman Portal</strong>
-        <i class="bi bi-gear-fill" onclick="document.getElementById('settings').style.display='block'"></i>
+        <div>
+            <i class="bi bi-person-plus-fill" onclick="document.getElementById('modal').style.display='block'"></i>
+            <i class="bi bi-gear-fill" onclick="location.href='/logout'"></i>
+        </div>
     </div>
 
-    <input type="text" class="search" placeholder="🔍 Search contacts..." onkeyup="filter(this.value)">
+    <form action="/upload_profile" method="POST" enctype="multipart/form-data" style="padding:10px; background:#fff;">
+        <small>Update DP:</small> <input type="file" name="pic" onchange="this.form.submit()">
+    </form>
 
-    <div class="list" id="contactList">
+    <div class="list">
         {% for c in contacts %}
-        <div class="contact-card" onclick="location.href='/chat/{{ c.contact_username }}'">
-            <img src="/static/default_dp.png" class="dp">
-            <div style="flex:1">
-                <strong>{{ c.contact_username }}</strong><br>
-                <small>+91 {{ c.contact_mobile }}</small>
+        <div class="contact-card">
+            <img src="/static/uploads/{{ c.profile_pic }}" class="dp" onclick="location.href='/chat/{{ c.username }}'">
+            <div style="flex:1" onclick="location.href='/chat/{{ c.username }}'">
+                <strong>{{ c.username }}</strong> <br>
+                <span class="status-dot {% if c.is_online %}online{% else %}offline{% endif %}"></span>
+                <small>{{ "+91 " + c.mobile }}</small>
             </div>
+            <a href="/delete_contact/{{ c.id }}" style="color:red; text-decoration:none;"><i class="bi bi-trash"></i></a>
         </div>
         {% endfor %}
     </div>
 
-    <div id="settings">
-        <h3>Settings</h3>
-        <input type="color" onchange="document.body.style.backgroundColor=this.value; localStorage.setItem('bg', this.value)" style="width:100%; height:40px;">
-        <button onclick="document.getElementById('settings').style.display='none'" style="width:100%; margin-top:10px;">Close</button>
+    <div id="modal">
+        <h3>Add New Contact</h3>
+        <form action="/add_contact" method="POST">
+            <input name="mobile" placeholder="Enter Mobile Number" required style="width:90%; padding:10px; margin-bottom:10px;">
+            <button type="submit" style="width:100%; padding:10px; background:var(--main); color:white; border:none;">Add</button>
+        </form>
+        <button onclick="document.getElementById('modal').style.display='none'" style="width:100%; margin-top:5px;">Cancel</button>
     </div>
-
-    <script>
-        function filter(v) {
-            let cards = document.getElementsByClassName('contact-card');
-            for(let c of cards) { c.style.display = c.innerText.toLowerCase().includes(v.toLowerCase()) ? "flex" : "none"; }
-        }
-        window.onload = () => { if(localStorage.getItem('bg')) document.body.style.backgroundColor = localStorage.getItem('bg'); }
-    </script>
 </body>
 </html>
