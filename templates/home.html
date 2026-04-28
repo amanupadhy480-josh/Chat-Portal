@@ -2,86 +2,51 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aman Portal - Contacts</title>
+    <title>Aman Portal</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         :root { --main: #075e54; --bg: #e5ddd5; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); transition: 0.3s; }
-        .navbar { background: var(--main); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
-        .user-item { background: white; margin: 8px; padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .dp-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--main); }
-        .search-box { width: 90%; margin: 15px auto; display: block; padding: 12px; border-radius: 25px; border: none; outline: none; }
-        .settings-btn { cursor: pointer; font-size: 20px; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-        .online { background: #25d366; }
-        .offline { background: #bbb; }
-        
-        /* Settings Modal */
-        #settingsModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 15px; width: 80%; max-width: 350px; box-shadow: 0 0 100px rgba(0,0,0,0.5); z-index: 1000; }
-        .btn-del { background: #ff4d4d; color: white; border: none; padding: 10px; width: 100%; border-radius: 5px; margin-top: 15px; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg); transition: 0.3s; }
+        .nav { background: var(--main); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .list { padding: 10px; }
+        .contact-card { background: white; padding: 12px; margin-bottom: 8px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: pointer; }
+        .dp { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; background: #ddd; }
+        .search { width: 90%; margin: 15px auto; display: block; padding: 12px; border-radius: 25px; border: none; }
+        #settings { display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; padding:20px; border-radius:15px; width:85%; z-index:100; box-shadow: 0 0 20px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
-    <div class="navbar">
+    <div class="nav">
         <strong>Aman Portal</strong>
-        <i class="bi bi-gear-fill settings-btn" onclick="toggleSettings()"></i>
+        <i class="bi bi-gear-fill" onclick="document.getElementById('settings').style.display='block'"></i>
     </div>
 
-    <input type="text" id="search" class="search-box" placeholder="🔍 Search or Add Mobile..." onkeyup="filterUsers()">
+    <input type="text" class="search" placeholder="🔍 Search contacts..." onkeyup="filter(this.value)">
 
-    <div id="contactList">
+    <div class="list" id="contactList">
         {% for c in contacts %}
-        <div class="user-item">
-            <img src="/uploads/{{ c.contact_mobile }}_dp.png" onerror="this.src='/static/default_dp.png'" class="dp-img">
-            <div style="flex:1" onclick="location.href='/chat/{{ c.contact_username }}'">
+        <div class="contact-card" onclick="location.href='/chat/{{ c.contact_username }}'">
+            <img src="/static/default_dp.png" class="dp">
+            <div style="flex:1">
                 <strong>{{ c.contact_username }}</strong><br>
                 <small>+91 {{ c.contact_mobile }}</small>
             </div>
-            <a href="/delete_contact/{{ c.id }}" style="color:red" onclick="return confirm('Remove contact?')"><i class="bi bi-trash"></i></a>
         </div>
         {% endfor %}
     </div>
 
-    <div id="settingsModal">
-        <h3>Account Settings</h3>
-        <hr>
-        <label>Theme Background:</label>
-        <input type="color" id="colorPicker" onchange="changeTheme(this.value)" style="width: 100%; height: 40px;">
-        
-        <form action="/add_contact" method="POST" style="margin-top:15px;">
-            <input name="mobile" placeholder="Add Mobile Number" required style="width:90%; padding:8px;">
-            <button type="submit" style="width:100%; margin-top:5px; background:var(--main); color:white; border:none; padding:8px;">Add Contact</button>
-        </form>
-
-        <form action="/delete_account" method="POST" onsubmit="return confirm('Account permanently delete karein?')">
-            <button class="btn-del">Delete My Account</button>
-        </form>
-        <button onclick="toggleSettings()" style="width:100%; margin-top:10px; border:none; padding:8px;">Close</button>
+    <div id="settings">
+        <h3>Settings</h3>
+        <input type="color" onchange="document.body.style.backgroundColor=this.value; localStorage.setItem('bg', this.value)" style="width:100%; height:40px;">
+        <button onclick="document.getElementById('settings').style.display='none'" style="width:100%; margin-top:10px;">Close</button>
     </div>
 
     <script>
-        function toggleSettings() {
-            let m = document.getElementById('settingsModal');
-            m.style.display = m.style.display === 'block' ? 'none' : 'block';
+        function filter(v) {
+            let cards = document.getElementsByClassName('contact-card');
+            for(let c of cards) { c.style.display = c.innerText.toLowerCase().includes(v.toLowerCase()) ? "flex" : "none"; }
         }
-
-        function changeTheme(color) {
-            document.body.style.backgroundColor = color;
-            localStorage.setItem('portal-bg', color);
-        }
-
-        window.onload = () => {
-            let savedColor = localStorage.getItem('portal-bg');
-            if(savedColor) document.body.style.backgroundColor = savedColor;
-        }
-
-        function filterUsers() {
-            let input = document.getElementById('search').value.toLowerCase();
-            let items = document.getElementsByClassName('user-item');
-            for (let item of items) {
-                item.style.display = item.innerText.toLowerCase().includes(input) ? "flex" : "none";
-            }
-        }
+        window.onload = () => { if(localStorage.getItem('bg')) document.body.style.backgroundColor = localStorage.getItem('bg'); }
     </script>
 </body>
 </html>
