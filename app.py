@@ -16,29 +16,30 @@ app.config['SECRET_KEY'] = 'aman_portal_2026'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 
 
-# Database Configuration
-uri = os.getenv("DATABASE_URL", "sqlite:///chat_v2.db")
-if uri.startswith("postgres://"): 
+# Database Configuration for PostgreSQL
+uri = os.getenv("DATABASE_URL")
+if uri and uri.startswith("postgres://"): 
     uri = uri.replace("postgres://", "postgresql://", 1)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = uri
+app.config['SQLALCHEMY_DATABASE_URI'] = uri or "sqlite:///chat_v2.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Threading fix for SQLite on Render
+# Connection pooling logic for PostgreSQL
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    "connect_args": {"check_same_thread": False} if uri.startswith("sqlite") else {},
-    "pool_pre_ping": True
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
 }
 
 db = SQLAlchemy(app)
-# Gevent mode enable kiya gaya hai
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# Models
+# --- Models ---
+# PostgreSQL mein 'user' reserved word hai, isliye __tablename__ = 'users' use kiya hai
 class User(UserMixin, db.Model):
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     mobile = db.Column(db.String(15), unique=True, nullable=False)
@@ -46,12 +47,14 @@ class User(UserMixin, db.Model):
     profile_pic = db.Column(db.String(200), default='default_dp.png')
 
 class Contact(db.Model):
+    __tablename__ = 'contacts'
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     contact_username = db.Column(db.String(50), nullable=False)
     contact_mobile = db.Column(db.String(15), nullable=False)
 
 class Message(db.Model):
+    __tablename__ = 'messages'
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(500), nullable=False)
     sender = db.Column(db.String(50), nullable=False)
@@ -61,6 +64,16 @@ class Message(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# --- Database Initialization Route ---
+# Deploy ke baad ek baar https://your-app.onrender.com/init_db par visit karein
+@app.route('/init_db')
+def init_db():
+    try:
+        db.create_all()
+        return "Database Tables Created Successfully on PostgreSQL!"
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 # --- Routes ---
 @app.route('/uploads/<filename>')
@@ -115,8 +128,12 @@ def signup():
         hashed_pw = generate_password_hash(request.form.get('password'), method='pbkdf2:sha256')
         new_user = User(username=request.form.get('username'), mobile=request.form.get('mobile'), password=hashed_pw)
         db.session.add(new_user)
-        db.session.commit()
-        return redirect(url_for('login'))
+        try:
+            db.session.commit()
+            return redirect(url_for('login'))
+        except:
+            db.session.rollback()
+            flash("Username or Mobile already exists")
     return render_template('signup.html')
 
 @app.route('/logout')
