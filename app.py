@@ -17,7 +17,7 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 
 
 # Database Configuration
-uri = os.getenv("DATABASE_URL", "sqlite:///chat.db")
+uri = os.getenv("DATABASE_URL", "sqlite:///chat_v2.db")
 if uri.startswith("postgres://"): 
     uri = uri.replace("postgres://", "postgresql://", 1)
 
