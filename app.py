@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, request, flash, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'aman_portal_2026_full'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024 # 20MB limit for files
+if not os.path.exists('uploads'): os.makedirs('uploads')
 
 # DB Config
 uri = os.getenv("DATABASE_URL")
@@ -35,7 +35,6 @@ class User(UserMixin, db.Model):
     password = db.Column(db.String(200))
     profile_pic = db.Column(db.String(200), default='default_dp.png')
     is_online = db.Column(db.Boolean, default=False)
-    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Contact(db.Model):
     __tablename__ = 'contacts'
@@ -48,7 +47,7 @@ class Message(db.Model):
     __tablename__ = 'messages'
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(1000))
-    file_path = db.Column(db.String(200)) # For file sharing
+    file_path = db.Column(db.String(200))
     sender = db.Column(db.String(50))
     receiver = db.Column(db.String(50))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -57,92 +56,36 @@ class Message(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- Database Init ---
+# --- Routes ---
 @app.route('/init_db')
 def init_db():
     db.create_all()
     return "Database Initialized!"
 
-# --- Account & Contacts Management ---
-@app.route('/add_contact', methods=['POST'])
-@login_required
-def add_contact():
-    mobile = request.form.get('mobile')
-    target_user = User.query.filter_by(mobile=mobile).first()
-    if target_user:
-        new_c = Contact(user_id=current_user.id, contact_username=target_user.username, contact_mobile=mobile)
-        db.session.add(new_c)
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        user = User.query.filter_by(mobile=request.form.get('mobile')).first()
+        if user and check_password_hash(user.password, request.form.get('password')):
+            login_user(user)
+            return redirect(url_for('home'))
+        flash("Invalid Credentials")
+    return render_template('login.html')
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        pw = generate_password_hash(request.form.get('password'))
+        new_u = User(username=request.form.get('username'), mobile=request.form.get('mobile'), password=pw)
+        db.session.add(new_u)
         db.session.commit()
-    return redirect(url_for('home'))
+        return redirect(url_for('login'))
+    return render_template('signup.html')
 
-@app.route('/delete_contact/<int:id>')
-@login_required
-def delete_contact(id):
-    c = Contact.query.get(id)
-    if c and c.user_id == current_user.id:
-        db.session.delete(c)
-        db.session.commit()
-    return redirect(url_for('home'))
-
-@app.route('/delete_account', methods=['POST'])
-@login_required
-def delete_account():
-    user = User.query.get(current_user.id)
-    Contact.query.filter_by(user_id=user.id).delete()
-    db.session.delete(user)
-    db.session.commit()
-    logout_user()
-    return redirect(url_for('signup'))
-
-# --- File Sharing Route ---
-@app.route('/send_file', methods=['POST'])
-@login_required
-def send_file():
-    if 'file' not in request.files: return "No file"
-    file = request.files['file']
-    recipient = request.form.get('recipient')
-    if file:
-        filename = secure_filename(f"file_{datetime.now().timestamp()}_{file.filename}")
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        msg = Message(content=file.filename, file_path=filename, sender=current_user.username, receiver=recipient)
-        db.session.add(msg)
-        db.session.commit()
-        return jsonify({"status": "sent", "filename": filename})
-
-# --- Real-time Logic ---
-@socketio.on('connect')
-def handle_connect():
-    if current_user.is_authenticated:
-        current_user.is_online = True
-        db.session.commit()
-        emit('user_status', {'user': current_user.username, 'status': 'online'}, broadcast=True)
-
-@socketio.on('disconnect')
-def handle_disconnect():
-    if current_user.is_authenticated:
-        current_user.is_online = False
-        current_user.last_seen = datetime.utcnow()
-        db.session.commit()
-        emit('user_status', {'user': current_user.username, 'status': 'offline'}, broadcast=True)
-
-@socketio.on('private_message')
-def handle_private_msg(data):
-    msg = Message(content=data['message'], sender=current_user.username, receiver=data['recipient'])
-    db.session.add(msg)
-    db.session.commit()
-    emit('new_msg', {
-        'msg': data['message'], 
-        'sender': current_user.username, 
-        'recipient': data['recipient'],
-        'time': datetime.now().strftime('%I:%M %p')
-    }, broadcast=True)
-
-# Main Routes
 @app.route('/')
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    # Logic to find people who messaged you but aren't in contacts
     return render_template('home.html', contacts=contacts)
 
 @app.route('/chat/<username>')
@@ -152,11 +95,14 @@ def chat(username):
     msgs = Message.query.filter(
         ((Message.sender == current_user.username) & (Message.receiver == username)) |
         ((Message.sender == username) & (Message.receiver == current_user.username))
-    ).order_by(Message.timestamp).all()
+    ).all()
     return render_template('chat.html', recipient=target, messages=msgs)
 
-# Auth routes (Login/Signup/Logout/Uploads) - [Aapke pehle wale standard code jaisa]
-# ... (Login, Signup implementation same as before)
+@app.route('/uploads/<filename>')
+def custom_static(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# (Add other routes like add_contact, send_file etc. from previous code)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
