@@ -8,14 +8,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_socketio import SocketIO, emit
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'aman_portal_2026'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 if not os.path.exists(app.config['UPLOAD_FOLDER']): os.makedirs(app.config['UPLOAD_FOLDER'])
 
-# Database Setup
+# Database Configuration
 uri = os.getenv("DATABASE_URL")
 if uri and uri.startswith("postgres://"): 
     uri = uri.replace("postgres://", "postgresql://", 1)
@@ -27,7 +26,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- Models ---
+# --- Database Models ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False)
@@ -45,7 +44,6 @@ class Contact(db.Model):
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     content = db.Column(db.String(1000))
-    file_path = db.Column(db.String(200))
     sender = db.Column(db.String(50))
     receiver = db.Column(db.String(50))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -55,49 +53,38 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # --- Routes ---
-
 @app.route('/')
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    contact_list = []
-    for c in contacts:
-        u = User.query.filter_by(mobile=c.contact_mobile).first()
-        status = u.is_online if u else False
-        pic = u.profile_pic if u else 'default_dp.png'
-        contact_list.append({'name': c.contact_name, 'mobile': c.contact_mobile, 'online': status, 'pic': pic})
-    return render_template('home.html', contacts=contact_list)
+    return render_template('home.html', contacts=contacts)
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
-        name = request.form.get('username')
-        mobile = request.form.get('mobile')
-        password = request.form.get('password')
-        
-        if not User.query.filter_by(mobile=mobile).first():
-            hashed_pw = generate_password_hash(password)
-            new_user = User(username=name, mobile=mobile, password=hashed_pw)
-            db.session.add(new_user)
+        u = request.form.get('username')
+        m = request.form.get('mobile')
+        p = request.form.get('password')
+        if not User.query.filter_by(mobile=m).first():
+            new_u = User(username=u, mobile=m, password=generate_password_hash(p))
+            db.session.add(new_u)
             db.session.commit()
             return redirect(url_for('login'))
-        else:
-            flash("Mobile number already registered!")
-    return render_template('signup.html') # Aapki signup.html file yahan load hogi
+        flash("Mobile already exists!")
+    return render_template('signup.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        mobile = request.form.get('mobile')
-        password = request.form.get('password')
-        user = User.query.filter_by(mobile=mobile).first()
-        if user and check_password_hash(user.password, password):
+        m = request.form.get('mobile')
+        p = request.form.get('password')
+        user = User.query.filter_by(mobile=m).first()
+        if user and check_password_hash(user.password, p):
             login_user(user)
             user.is_online = True
             db.session.commit()
             return redirect(url_for('home'))
-        else:
-            flash("Invalid credentials!")
+        flash("Invalid Credentials")
     return render_template('login.html')
 
 @app.route('/logout')
@@ -119,16 +106,16 @@ def chat(name, mobile):
 
 @socketio.on('private_message')
 def handle_msg(data):
-    new_msg = Message(content=data['message'], sender=data['sender'], receiver=data['recipient'])
-    db.session.add(new_msg)
+    msg = Message(content=data['message'], sender=data['sender'], receiver=data['recipient'])
+    db.session.add(msg)
     db.session.commit()
     emit('new_msg', data, broadcast=True)
 
 @app.route('/init_db')
 def init_db():
-    db.drop_all() # Purani tables delete karne ke liye
-    db.create_all() # Nayi tables banane ke liye
-    return "Database Refreshed Successfully!"
+    db.create_all()
+    return "Database Created!"
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app)
+            
