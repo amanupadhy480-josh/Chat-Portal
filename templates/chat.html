@@ -1,63 +1,60 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat with {{ r_name }}</title>
+    <title>{{ r_name }}</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    
     <style>
-        :root { --wa-green: #075e54; --wa-light: #dcf8c6; --bg-chat: #e5ddd5; }
-        body { font-family: sans-serif; margin: 0; background: var(--bg-chat); height: 100vh; display: flex; flex-direction: column; }
+        :root { --wa-green: #075e54; --wa-light: #dcf8c6; --bg: #e5ddd5; }
+        body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; height: 100vh; }
         
-        .header { background: var(--wa-green); color: white; padding: 10px 15px; display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 10; }
-        .header a { color: white; text-decoration: none; font-size: 20px; }
-        .header img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #eee; }
+        .header { background: var(--wa-green); color: white; padding: 10px; display: flex; align-items: center; gap: 10px; }
+        .header img { width: 40px; height: 40px; border-radius: 50%; }
         
-        #msgs { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+        #msgs { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .m { padding: 8px 12px; border-radius: 10px; max-width: 75%; position: relative; font-size: 15px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .sent { align-self: flex-end; background: var(--wa-light); }
+        .recv { align-self: flex-start; background: white; }
         
-        .m { padding: 8px 12px; border-radius: 10px; max-width: 75%; position: relative; font-size: 15px; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .sent { align-self: flex-end; background: var(--wa-light); border-top-right-radius: 2px; }
-        .recv { align-self: flex-start; background: white; border-top-left-radius: 2px; }
-        
-        .msg-info { font-size: 10px; color: #888; text-align: right; margin-top: 4px; display: flex; justify-content: flex-end; align-items: center; gap: 3px; }
-        .tick { color: #34b7f1; font-weight: bold; }
-        
+        .media-content { max-width: 100%; border-radius: 8px; margin-bottom: 5px; }
+        .tick { color: #34b7f1; font-size: 12px; margin-left: 5px; }
+        .status { font-size: 10px; color: #25d366; }
+
         .input-area { background: #f0f0f0; padding: 10px; display: flex; gap: 10px; align-items: center; }
-        #i { flex: 1; border: none; padding: 12px 15px; border-radius: 25px; outline: none; font-size: 15px; }
-        .send-btn { background: none; border: none; color: var(--wa-green); font-size: 25px; cursor: pointer; padding: 0 5px; }
-        
-        .attachment-link { color: #075e54; text-decoration: none; font-weight: bold; display: block; padding: 5px 0; }
+        input[type="text"] { flex: 1; border: none; padding: 12px; border-radius: 20px; outline: none; }
+        .btn-icon { color: var(--wa-green); font-size: 24px; cursor: pointer; }
     </style>
 </head>
-<body>
+<body id="chat-body">
 
     <div class="header">
-        <a href="/"><i class="bi bi-chevron-left"></i></a>
-        <img src="/static/uploads/default_dp.png" alt="dp">
-        <div style="flex: 1;">
+        <a href="/" style="color:white; text-decoration:none;"><i class="bi bi-arrow-left"></i></a>
+        <img src="/static/uploads/{{ target.profile_pic }}">
+        <div style="flex:1">
             <strong>{{ r_name }}</strong><br>
-            <small style="font-size: 10px; opacity: 0.8;">Online</small>
+            <span class="status">{% if target.is_online %}● Online{% else %}Offline{% endif %}</span>
         </div>
-        <i class="bi bi-telephone-fill"></i>
+        <i class="bi bi-three-dots-vertical" onclick="toggleTheme()"></i>
     </div>
 
     <div id="msgs">
         {% for m in messages %}
         <div class="m {% if m.sender == current_user.mobile %}sent{% else %}recv{% endif %}">
-            {% if m.file_path %}
-                <a href="/static/uploads/{{ m.file_path }}" class="attachment-link" target="_blank">
-                    <i class="bi bi-file-earmark-arrow-down"></i> Attachment
-                </a>
-            {% else %}
-                {{ m.content }}
+            {% if m.file_url %}
+                {% if m.file_type == 'image' %}
+                    <img src="/static/uploads/{{ m.file_url }}" class="media-content">
+                {% else %}
+                    <video src="/static/uploads/{{ m.file_url }}" class="media-content" controls></video>
+                {% endif %}
             {% endif %}
             
-            <div class="msg-info">
-                {{ m.timestamp.strftime('%H:%M') }} 
+            {{ m.content }}
+            
+            <div style="font-size: 9px; text-align: right; color: #888;">
+                {{ m.timestamp.strftime('%H:%M') }}
                 {% if m.sender == current_user.mobile %}
-                    <span class="tick">✓✓</span>
+                    <span class="tick">{% if m.is_read %}✓✓{% else %}✓{% endif %}</span>
                 {% endif %}
             </div>
         </div>
@@ -65,15 +62,13 @@
     </div>
 
     <div class="input-area">
-        <i class="bi bi-paperclip" style="font-size: 22px; cursor: pointer; color: #555;" onclick="document.getElementById('file-up').click()"></i>
-        <input id="i" placeholder="Type a message..." autocomplete="off">
-        <button class="send-btn" onclick="send()">
-            <i class="bi bi-send-fill"></i>
-        </button>
+        <i class="bi bi-plus-circle btn-icon" onclick="document.getElementById('f-input').click()"></i>
+        <input type="text" id="i" placeholder="Type a message...">
+        <i class="bi bi-send-fill btn-icon" onclick="send()"></i>
     </div>
 
-    <form id="file-form" action="/send_file" method="POST" enctype="multipart/form-data" style="display:none;">
-        <input type="file" name="file" id="file-up" onchange="this.form.submit()">
+    <form id="f-form" action="/upload_file" method="POST" enctype="multipart/form-data" style="display:none;">
+        <input type="file" name="file" id="f-input" onchange="this.form.submit()">
         <input type="hidden" name="r_mobile" value="{{ r_mobile }}">
     </form>
 
@@ -82,37 +77,35 @@
         var me = "{{ current_user.mobile }}";
         var target = "{{ r_mobile }}";
 
-        // Scroll to bottom on load
-        var msgDiv = document.getElementById('msgs');
-        msgDiv.scrollTop = msgDiv.scrollHeight;
-
         function send() {
             let input = document.getElementById('i');
-            if(input.value.trim() !== "") {
+            if(input.value.trim() != "") {
                 socket.emit('private_message', {
-                    message: input.value, 
-                    recipient: target, 
-                    sender: me
+                    message: input.value, recipient: target, sender: me
                 });
                 input.value = '';
             }
         }
 
-        // Enter key to send
-        document.getElementById('i').addEventListener("keypress", function(event) {
-            if (event.key === "Enter") {
-                send();
-            }
-        });
-
         socket.on('new_msg', (data) => {
-            // Check if msg belongs to this chat
             if((data.sender == me && data.recipient == target) || (data.sender == target && data.recipient == me)) {
-                // Reload to sync with DB and show ticks/files correctly
-                location.reload(); 
+                location.reload(); // Sync database & ticks
             }
         });
-    </script>
 
+        function toggleTheme() {
+            let colors = ["#e5ddd5", "#000000", "#1a1a1a", "#ffffff"];
+            let current = localStorage.getItem('theme') || colors[0];
+            let next = colors[(colors.indexOf(current) + 1) % colors.length];
+            document.body.style.backgroundColor = next;
+            localStorage.setItem('theme', next);
+        }
+
+        window.onload = () => {
+            document.body.style.backgroundColor = localStorage.getItem('theme') || "#e5ddd5";
+            let obj = document.getElementById('msgs');
+            obj.scrollTop = obj.scrollHeight;
+        };
+    </script>
 </body>
 </html>
