@@ -55,6 +55,7 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 # --- Routes ---
+
 @app.route('/')
 @login_required
 def home():
@@ -67,29 +68,45 @@ def home():
         contact_list.append({'name': c.contact_name, 'mobile': c.contact_mobile, 'online': status, 'pic': pic})
     return render_template('home.html', contacts=contact_list)
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
     if request.method == 'POST':
         name = request.form.get('username')
         mobile = request.form.get('mobile')
-        pw = generate_password_hash(request.form.get('password'))
+        password = request.form.get('password')
+        
         if not User.query.filter_by(mobile=mobile).first():
-            new_user = User(username=name, mobile=mobile, password=pw)
+            hashed_pw = generate_password_hash(password)
+            new_user = User(username=name, mobile=mobile, password=hashed_pw)
             db.session.add(new_user)
             db.session.commit()
             return redirect(url_for('login'))
-    return render_template('register.html')
+        else:
+            flash("Mobile number already registered!")
+    return render_template('signup.html') # Aapki signup.html file yahan load hogi
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        user = User.query.filter_by(mobile=request.form.get('mobile')).first()
-        if user and check_password_hash(user.password, request.form.get('password')):
+        mobile = request.form.get('mobile')
+        password = request.form.get('password')
+        user = User.query.filter_by(mobile=mobile).first()
+        if user and check_password_hash(user.password, password):
             login_user(user)
             user.is_online = True
             db.session.commit()
             return redirect(url_for('home'))
+        else:
+            flash("Invalid credentials!")
     return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    current_user.is_online = False
+    db.session.commit()
+    logout_user()
+    return redirect(url_for('login'))
 
 @app.route('/chat/<name>/<mobile>')
 @login_required
@@ -109,8 +126,9 @@ def handle_msg(data):
 
 @app.route('/init_db')
 def init_db():
-    db.create_all()
-    return "Database Initialized!"
+    db.drop_all() # Purani tables delete karne ke liye
+    db.create_all() # Nayi tables banane ke liye
+    return "Database Refreshed Successfully!"
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
