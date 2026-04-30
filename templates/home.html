@@ -1,53 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyLine Chat</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        :root { --main: #075e54; --bg: #e5ddd5; }
-        body { font-family: sans-serif; margin: 0; background: var(--bg); }
-        .nav { background: var(--main); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .contact-card { background: white; padding: 12px; margin: 8px; border-radius: 10px; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .dp { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; background: #ddd; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-        .online { background: #25d366; } .offline { background: #bbb; }
-        #modal { display:none; position:fixed; top:20%; left:5%; width:90%; background:white; padding:20px; border-radius:10px; box-shadow:0 0 20px rgba(0,0,0,0.5); }
+        :root { --main: #075e54; --bg: #e5ddd5; --white: #ffffff; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: var(--bg); overflow-x: hidden; }
+        
+        /* Navbar */
+        .nav { background: var(--main); color: white; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .nav-brand { font-size: 20px; font-weight: bold; }
+        .nav-icons { display: flex; gap: 20px; align-items: center; }
+        .nav-icons i { font-size: 20px; cursor: pointer; }
+
+        /* Profile Section */
+        .profile-container { position: relative; width: 40px; height: 40px; }
+        .profile-pic-nav { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid white; cursor: pointer; }
+
+        /* Search Bar */
+        .search-box { padding: 10px; background: #fff; }
+        .search-inner { background: #f0f2f5; display: flex; align-items: center; padding: 8px 15px; border-radius: 20px; }
+        .search-inner input { border: none; background: transparent; margin-left: 10px; width: 100%; outline: none; font-size: 15px; }
+
+        /* Contact List */
+        .list-container { background: var(--white); min-height: calc(100vh - 120px); }
+        .contact-card { display: flex; align-items: center; padding: 12px 15px; border-bottom: 1px solid #f0f0f0; transition: 0.2s; cursor: pointer; text-decoration: none; color: inherit; }
+        .contact-card:active { background: #f5f5f5; }
+        .dp-large { width: 55px; height: 55px; border-radius: 50%; object-fit: cover; background: #eee; }
+        .contact-info { flex: 1; margin-left: 15px; }
+        .contact-info strong { font-size: 17px; color: #000; }
+        .status-text { font-size: 13px; display: flex; align-items: center; gap: 5px; }
+        .online { color: #25d366; }
+        .offline { color: #888; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* Action Buttons */
+        .delete-btn { color: #e91e63; padding: 10px; font-size: 18px; }
+
+        /* Modal / Add Contact Form */
+        #addModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background: white; width: 100%; max-width: 350px; padding: 25px; border-radius: 15px; text-align: center; }
+        .modal-content input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .btn-add { background: var(--main); color: white; border: none; width: 100%; padding: 12px; border-radius: 8px; font-weight: bold; margin-bottom: 10px; }
+        .btn-cancel { background: #eee; border: none; width: 100%; padding: 10px; border-radius: 8px; }
+
+        /* Flash Messages */
+        .flash-msg { background: #323232; color: white; padding: 10px; text-align: center; font-size: 14px; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); border-radius: 20px; z-index: 2000; }
     </style>
 </head>
 <body>
+
     <div class="nav">
-        <strong>Aman Portal</strong>
-        <div>
-            <i class="bi bi-person-plus-fill" onclick="document.getElementById('modal').style.display='block'"></i>
-            <i class="bi bi-gear-fill" onclick="location.href='/logout'"></i>
+        <div class="nav-brand">SkyLine Chat</div>
+        <div class="nav-icons">
+            <i class="bi bi-person-plus-fill" onclick="showModal()"></i>
+            
+            <form action="/upload_profile" method="POST" enctype="multipart/form-data" id="dpForm">
+                <label for="picInput">
+                    <img src="/static/uploads/{{ current_user.profile_pic }}" class="profile-pic-nav" alt="DP">
+                </label>
+                <input type="file" name="pic" id="picInput" style="display:none;" onchange="document.getElementById('dpForm').submit()">
+            </form>
+            
+            <a href="/logout" style="color:white;"><i class="bi bi-box-arrow-right"></i></a>
         </div>
     </div>
 
-    <form action="/upload_profile" method="POST" enctype="multipart/form-data" style="padding:10px; background:#fff;">
-        <small>Update DP:</small> <input type="file" name="pic" onchange="this.form.submit()">
-    </form>
+    <div class="search-box">
+        <div class="search-inner">
+            <i class="bi bi-search" style="color:#888;"></i>
+            <input type="text" id="contactSearch" placeholder="Search contacts..." onkeyup="filterContacts()">
+        </div>
+    </div>
 
-    <div class="list">
+    <div class="list-container" id="contactList">
         {% for c in contacts %}
-        <div class="contact-card">
-            <img src="/static/uploads/{{ c.profile_pic }}" class="dp" onclick="location.href='/chat/{{ c.username }}'">
-            <div style="flex:1" onclick="location.href='/chat/{{ c.username }}'">
-                <strong>{{ c.username }}</strong> <br>
-                <span class="status-dot {% if c.is_online %}online{% else %}offline{% endif %}"></span>
-                <small>{{ "+91 " + c.mobile }}</small>
+        <div class="contact-card-wrapper" data-name="{{ c.name }}">
+            <div class="contact-card">
+                <img src="/static/uploads/{{ c.pic }}" class="dp-large" onclick="location.href='/chat/{{ c.name }}/{{ c.mobile }}'">
+                <div class="contact-info" onclick="location.href='/chat/{{ c.name }}/{{ c.mobile }}'">
+                    <strong>{{ c.name }}</strong><br>
+                    <span class="status-text {% if c.online %}online{% else %}offline{% endif %}">
+                        <span class="dot" style="background-color: {% if c.online %}#25d366{% else %}#bbb{% endif %};"></span>
+                        {% if c.online %}Online{% else %}Offline{% endif %}
+                    </span>
+                </div>
+                <a href="/delete_contact/{{ c.id }}" class="delete-btn" onclick="return confirm('Delete this contact?')">
+                    <i class="bi bi-trash3"></i>
+                </a>
             </div>
-            <a href="/delete_contact/{{ c.id }}" style="color:red; text-decoration:none;"><i class="bi bi-trash"></i></a>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 50px; color: #888;">
+            <i class="bi bi-people" style="font-size: 50px;"></i>
+            <p>No contacts yet. Add someone to start chatting!</p>
         </div>
         {% endfor %}
     </div>
 
-    <div id="modal">
-        <h3>Add New Contact</h3>
-        <form action="/add_contact" method="POST">
-            <input name="mobile" placeholder="Enter Mobile Number" required style="width:90%; padding:10px; margin-bottom:10px;">
-            <button type="submit" style="width:100%; padding:10px; background:var(--main); color:white; border:none;">Add</button>
-        </form>
-        <button onclick="document.getElementById('modal').style.display='none'" style="width:100%; margin-top:5px;">Cancel</button>
+    <div id="addModal">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">Add New Friend</h3>
+            <p style="font-size: 14px; color: #666;">Enter the mobile number of a SkyLine user.</p>
+            <form action="/add_contact" method="POST">
+                <input type="tel" name="mobile" placeholder="Mobile Number (e.g. 9704...)" required autofocus>
+                <button type="submit" class="btn-add">Add Contact</button>
+                <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
+            </form>
+        </div>
     </div>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <div class="flash-msg">{{ messages[0] }}</div>
+            <script>setTimeout(() => { document.querySelector('.flash-msg').style.display='none'; }, 3000);</script>
+        {% endif %}
+    {% endwith %}
+
+    <script>
+        function showModal() { document.getElementById('addModal').style.display = 'flex'; }
+        function closeModal() { document.getElementById('addModal').style.display = 'none'; }
+
+        // Filter/Search Contacts
+        function filterContacts() {
+            let input = document.getElementById('contactSearch').value.toLowerCase();
+            let cards = document.getElementsByClassName('contact-card-wrapper');
+            for (let i = 0; i < cards.length; i++) {
+                let name = cards[i].getAttribute('data-name').toLowerCase();
+                cards[i].style.display = name.includes(input) ? "block" : "none";
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            let modal = document.getElementById('addModal');
+            if (event.target == modal) { closeModal(); }
+        }
+    </script>
+
 </body>
-</html>
+        </html>
+        
