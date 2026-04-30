@@ -11,7 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'skyline_secret_2026'
+app.config['SECRET_KEY'] = 'skyline_ultra_2026'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 if not os.path.exists(app.config['UPLOAD_FOLDER']): os.makedirs(app.config['UPLOAD_FOLDER'])
 
@@ -69,20 +69,65 @@ def home():
         })
     return render_template('home.html', contacts=clist)
 
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        u, m, p = request.form.get('username'), request.form.get('mobile'), request.form.get('password')
+        if not User.query.filter_by(mobile=m).first():
+            db.session.add(User(username=u, mobile=m, password=generate_password_hash(p)))
+            db.session.commit()
+            return redirect(url_for('login'))
+        flash("Mobile number already registered!")
+    return render_template('signup.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        m, p = request.form.get('mobile'), request.form.get('password')
+        user = User.query.filter_by(mobile=m).first()
+        if user and check_password_hash(user.password, p):
+            login_user(user)
+            user.is_online = True
+            db.session.commit()
+            return redirect(url_for('home'))
+        flash("Invalid Credentials")
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    current_user.is_online = False
+    db.session.commit()
+    logout_user()
+    return redirect(url_for('login'))
+
 @app.route('/add_contact', methods=['POST'])
 @login_required
 def add_contact():
     m = request.form.get('mobile')
     target = User.query.filter_by(mobile=m).first()
     if target:
-        # Check if already added
-        exists = Contact.query.filter_by(user_id=current_user.id, c_mobile=m).first()
-        if not exists:
-            db.session.add(Contact(user_id=current_user.id, c_name=target.username, c_mobile=m))
-            db.session.commit()
-            flash("Contact added!")
-        else: flash("Already in contacts.")
-    else: flash("User not found on SkyLine.")
+        if m == current_user.mobile:
+            flash("You can't add yourself!")
+        else:
+            exists = Contact.query.filter_by(user_id=current_user.id, c_mobile=m).first()
+            if not exists:
+                db.session.add(Contact(user_id=current_user.id, c_name=target.username, c_mobile=m))
+                db.session.commit()
+                flash("Contact added successfully!")
+            else:
+                flash("Contact already in your list.")
+    else:
+        flash("Mobile number not found on SkyLine Chat.")
+    return redirect(url_for('home'))
+
+@app.route('/delete_contact/<int:id>')
+@login_required
+def delete_contact(id):
+    c = Contact.query.get(id)
+    if c and c.user_id == current_user.id:
+        db.session.delete(c)
+        db.session.commit()
     return redirect(url_for('home'))
 
 @app.route('/upload_profile', methods=['POST'])
@@ -94,12 +139,12 @@ def upload_profile():
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         current_user.profile_pic = filename
         db.session.commit()
+        flash("Profile updated!")
     return redirect(url_for('home'))
 
 @app.route('/chat/<name>/<mobile>')
 @login_required
 def chat(name, mobile):
-    # Mark as read
     Message.query.filter_by(sender=mobile, receiver=current_user.mobile).update({Message.is_read: True})
     db.session.commit()
     msgs = Message.query.filter(
@@ -113,10 +158,14 @@ def chat(name, mobile):
 def init_db():
     db.drop_all()
     db.create_all()
-    return "SkyLine Database Refreshed! Signup again."
+    return "SkyLine Chat Database Cleaned & Refreshed! Please Signup again."
 
-# login, signup, logout routes remain same...
-# [Include your existing login/signup logic here]
+@socketio.on('private_message')
+def handle_msg(data):
+    db.session.add(Message(content=data['message'], sender=data['sender'], receiver=data['recipient']))
+    db.session.commit()
+    emit('new_msg', data, broadcast=True)
 
 if __name__ == '__main__':
     socketio.run(app)
+    
