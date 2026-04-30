@@ -11,14 +11,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'aman_portal_ultra_2026'
+app.config['SECRET_KEY'] = 'aman_portal_2026_final'
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 if not os.path.exists(app.config['UPLOAD_FOLDER']): os.makedirs(app.config['UPLOAD_FOLDER'])
 
-# Database Setup
+# Database Config
 uri = os.getenv("DATABASE_URL")
-if uri and uri.startswith("postgres://"): uri = uri.replace("postgres://", "postgresql://", 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = uri or "sqlite:///aman_ultra.db"
+if uri and uri.startswith("postgres://"): 
+    uri = uri.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = uri or "sqlite:///aman_chat_final.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -59,16 +60,13 @@ def load_user(user_id): return User.query.get(int(user_id))
 @login_required
 def home():
     contacts = Contact.query.filter_by(user_id=current_user.id).all()
-    # Har contact ki details fetch karna
     contact_list = []
     for c in contacts:
         u = User.query.filter_by(mobile=c.c_mobile).first()
         contact_list.append({
-            'id': c.id,
-            'username': c.c_name,
-            'mobile': c.c_mobile,
-            'profile_pic': u.profile_pic if u else 'default_dp.png',
-            'is_online': u.is_online if u else False
+            'id': c.id, 'username': c.c_name, 'mobile': c.c_mobile,
+            'pic': u.profile_pic if u else 'default_dp.png',
+            'online': u.is_online if u else False
         })
     return render_template('home.html', contacts=contact_list)
 
@@ -112,8 +110,6 @@ def add_contact():
     if target:
         db.session.add(Contact(user_id=current_user.id, c_name=target.username, c_mobile=m))
         db.session.commit()
-    else:
-        flash("User not found on Aman Portal!")
     return redirect(url_for('home'))
 
 @app.route('/delete_contact/<int:id>')
@@ -139,15 +135,13 @@ def upload_profile():
 @app.route('/chat/<name>/<mobile>')
 @login_required
 def chat(name, mobile):
-    # Mark messages as read
+    # Mark as read
     Message.query.filter_by(sender=mobile, receiver=current_user.mobile).update({Message.is_read: True})
     db.session.commit()
-    
     msgs = Message.query.filter(
         ((Message.sender == current_user.mobile) & (Message.receiver == mobile)) |
         ((Message.sender == mobile) & (Message.receiver == current_user.mobile))
     ).order_by(Message.timestamp).all()
-    
     target_user = User.query.filter_by(mobile=mobile).first()
     return render_template('chat.html', r_name=name, r_mobile=mobile, messages=msgs, target=target_user)
 
@@ -160,24 +154,21 @@ def upload_file():
         filename = secure_filename(f"media_{datetime.now().timestamp()}_{file.filename}")
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         f_type = 'image' if filename.lower().endswith(('.png', '.jpg', '.jpeg')) else 'video'
-        
-        new_msg = Message(sender=current_user.mobile, receiver=r_mobile, file_url=filename, file_type=f_type)
-        db.session.add(new_msg)
+        db.session.add(Message(sender=current_user.mobile, receiver=r_mobile, file_url=filename, file_type=f_type))
         db.session.commit()
     return redirect(url_for('chat', name="User", mobile=r_mobile))
 
 @socketio.on('private_message')
 def handle_msg(data):
-    msg = Message(content=data['message'], sender=data['sender'], receiver=data['recipient'])
-    db.session.add(msg)
+    db.session.add(Message(content=data['message'], sender=data['sender'], receiver=data['recipient']))
     db.session.commit()
     emit('new_msg', data, broadcast=True)
 
 @app.route('/init_db')
 def init_db():
-    db.drop_all() # Resetting for new columns
-    db.create_all()
-    return "Database Ready with Blue Tick & Media features!"
+    db.drop_all() # Purana data saaf
+    db.create_all() # Nayi columns ke saath fresh start
+    return "Database Refreshed! Go to /signup now."
 
 if __name__ == '__main__':
     socketio.run(app)
